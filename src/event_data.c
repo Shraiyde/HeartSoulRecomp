@@ -1,6 +1,7 @@
 #include "global.h"
 #include "event_data.h"
 #include "pokedex.h"
+#include "coop.h"
 
 #define SPECIAL_FLAGS_SIZE  (NUM_SPECIAL_FLAGS / 8)  // 8 flags per byte
 #define TEMP_FLAGS_SIZE     (NUM_TEMP_FLAGS / 8)
@@ -223,6 +224,9 @@ bool8 VarSet(u16 id, u16 value)
     if (!ptr)
         return FALSE;
     *ptr = value;
+#ifdef PORTABLE
+    Coop_OnVarChanged(id, value);
+#endif
     return TRUE;
 }
 
@@ -250,6 +254,9 @@ u8 FlagSet(u16 id)
     u8 *ptr = GetFlagPointer(id);
     if (ptr)
         *ptr |= 1 << (id & 7);
+#ifdef PORTABLE
+    Coop_OnFlagChanged(id, TRUE);
+#endif
     return 0;
 }
 
@@ -258,6 +265,9 @@ u8 FlagToggle(u16 id)
     u8 *ptr = GetFlagPointer(id);
     if (ptr)
         *ptr ^= 1 << (id & 7);
+#ifdef PORTABLE
+    Coop_OnFlagChanged(id, FlagGet(id));
+#endif
     return 0;
 }
 
@@ -266,6 +276,9 @@ u8 FlagClear(u16 id)
     u8 *ptr = GetFlagPointer(id);
     if (ptr)
         *ptr &= ~(1 << (id & 7));
+#ifdef PORTABLE
+    Coop_OnFlagChanged(id, FALSE);
+#endif
     return 0;
 }
 

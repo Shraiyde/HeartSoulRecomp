@@ -1,4 +1,5 @@
 #include "global.h"
+#include "coop.h"
 #include "malloc.h"
 #include "berry_powder.h"
 #include "fake_rtc.h"
@@ -224,6 +225,14 @@ void SaveObjectEvents(void)
         // To avoid crash on vanilla, save follower as inactive
         if (gObjectEvents[i].localId == OBJ_EVENT_ID_FOLLOWER)
             gSaveBlock1Ptr->objectEvents[i].active = FALSE;
+#ifdef PORTABLE
+        // The partner and their Pokémon are live objects, not map data.
+        if (Coop_IsCoopLocalId(gObjectEvents[i].localId))
+        {
+            memset(&gSaveBlock1Ptr->objectEvents[i], 0, sizeof(gSaveBlock1Ptr->objectEvents[i]));
+            gSaveBlock1Ptr->objectEvents[i].localId = 0xFF;
+        }
+#endif
     }
 }
 

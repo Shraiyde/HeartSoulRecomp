@@ -1,4 +1,5 @@
 #include "global.h"
+#include "coop.h"
 #include "malloc.h"
 #include "battle_anim.h"
 #include "battle_pyramid.h"
@@ -1793,21 +1794,35 @@ static bool8 GetAvailableObjectEventId(u16 localId, u8 mapNum, u8 mapGroup, u8 *
 // If no slots are available, or if the object is already
 // loaded, returns TRUE.
 {
-    u8 i = 0;
+    u8 i;
+    u8 found = OBJECT_EVENTS_COUNT;
 
-    for (i = 0; i < OBJECT_EVENTS_COUNT && gObjectEvents[i].active; i++)
+#ifdef PORTABLE
     {
-        if (gObjectEvents[i].localId == localId && gObjectEvents[i].mapNum == mapNum && gObjectEvents[i].mapGroup == mapGroup)
-            return TRUE;
+        u8 preferred = Coop_TakePreferredObjectEventId();
+        if (preferred < OBJECT_EVENTS_COUNT && !gObjectEvents[preferred].active)
+        {
+            *objectEventId = preferred;
+            return FALSE;
+        }
     }
-    if (i >= OBJECT_EVENTS_COUNT)
+#endif
+
+    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+    {
+        if (gObjectEvents[i].active && gObjectEvents[i].localId == localId
+            && gObjectEvents[i].mapNum == mapNum && gObjectEvents[i].mapGroup == mapGroup)
+            return TRUE;
+#ifdef PORTABLE
+        if (Coop_IsReservedPresenceObjectEventId(i))
+            continue;
+#endif
+        if (!gObjectEvents[i].active && found == OBJECT_EVENTS_COUNT)
+            found = i;
+    }
+    if (found >= OBJECT_EVENTS_COUNT)
         return TRUE;
-    *objectEventId = i;
-    for (; i < OBJECT_EVENTS_COUNT; i++)
-    {
-        if (gObjectEvents[i].active && gObjectEvents[i].localId == localId && gObjectEvents[i].mapNum == mapNum && gObjectEvents[i].mapGroup == mapGroup)
-            return TRUE;
-    }
+    *objectEventId = found;
     return FALSE;
 }
 
@@ -3210,6 +3225,10 @@ void RemoveObjectEventsOutsideView(void)
         if (!isActiveLinkPlayer)
         {
             struct ObjectEvent *objectEvent = &gObjectEvents[i];
+#ifdef PORTABLE
+            if (Coop_IsReservedPresenceObjectEventId(i))
+                continue;
+#endif
 
             // Followers should not go OOB, or their sprites may be freed early during a cross-map scripting event,
             // such as Wally's Ralts catch sequence

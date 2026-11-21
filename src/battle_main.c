@@ -1,5 +1,6 @@
 #include "global.h"
 #include "battle.h"
+#include "coop.h"
 #include "battle_anim.h"
 #include "challenge_menu.h"
 #include "battle_ai_main.h"
@@ -538,6 +539,9 @@ const u8 *const gStatusConditionStringsTable[][2] =
 
 void CB2_InitBattle(void)
 {
+#ifdef PORTABLE
+    Coop_OnBattleStarted();
+#endif
     if (!gTestRunnerEnabled)
         MoveSaveBlocks_ResetHeap();
     AllocateBattleResources();
@@ -3159,6 +3163,21 @@ void BeginBattleIntro(void)
 
 static void BattleMainCB1(void)
 {
+#ifdef PORTABLE
+    /* A dropped partner ends the fight on the next battle frame. The
+     * outcome alone is only noticed at a turn boundary. */
+    if (Coop_BattleAbortPending())
+    {
+        if (gBattleOutcome == 0)
+            gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+        gCurrentActionFuncId = B_ACTION_FINISHED;
+        if (gBattleMainFunc != HandleEndTurn_FinishBattle
+            && gBattleMainFunc != FreeResetData_ReturnToOvOrDoEvolutions
+            && gBattleMainFunc != ReturnFromBattleToOverworld
+            && gBattleMainFunc != WaitForEvoSceneToFinish)
+            gBattleMainFunc = HandleEndTurn_FinishBattle;
+    }
+#endif
     gBattleMainFunc();
     for (enum BattlerId battler = 0; battler < gBattlersCount; battler++)
         gBattlerControllerFuncs[battler](battler);
@@ -5802,6 +5821,13 @@ static void HandleEndTurn_FinishBattle(void)
 {
     if (gCurrentActionFuncId == B_ACTION_TRY_FINISH || gCurrentActionFuncId == B_ACTION_FINISHED)
     {
+#ifdef PORTABLE
+        // A dropped session must not keep damage, EXP, a catch or a faint.
+        if (Coop_BattleAbortPending())
+        {
+            gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+        }
+#endif
         // Both of these loops are keyed by the party index each mon had at the START of the
         // battle (gBattleStruct->itemLost and gBattleStruct->partyState). They must run before
         // anything that reorders gPlayerParty, or they apply to the wrong mons. The Mirror
@@ -5828,7 +5854,8 @@ static void HandleEndTurn_FinishBattle(void)
                 gPlayerParty[j] = gPlayerPartyBackup[j];
         }
 
-        if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK
+        if (!Coop_BattleAbortPending()
+            && !(gBattleTypeFlags & (BATTLE_TYPE_LINK
                                   | BATTLE_TYPE_RECORDED_LINK
                                   | BATTLE_TYPE_FIRST_BATTLE
                                   | BATTLE_TYPE_SAFARI
@@ -5893,7 +5920,7 @@ static void HandleEndTurn_FinishBattle(void)
             TryPutBreakingNewsOnAir();
         }
 
-        if (IsNuzlockeEasyActive())
+        if (!Coop_BattleAbortPending() && IsNuzlockeEasyActive())
         {
             if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK
                                         | BATTLE_TYPE_LINK_IN_BATTLE
@@ -5906,7 +5933,7 @@ static void HandleEndTurn_FinishBattle(void)
                                         | BATTLE_TYPE_TRAINER_HILL)))
                 NuzlockeDeleteFaintedPartyPokemon();
         }
-        if (IsNuzlockeActive())
+        if (!Coop_BattleAbortPending() && IsNuzlockeActive())
         {
             if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK
                                         | BATTLE_TYPE_LINK_IN_BATTLE
@@ -6084,6 +6111,13 @@ static void WaitForEvoSceneToFinish(void)
 
 static void ReturnFromBattleToOverworld(void)
 {
+#ifdef PORTABLE
+    if (Coop_BattleAbortPending())
+    {
+        Coop_LeaveAbortedBattle();
+        return;
+    }
+#endif
     if (!(gBattleTypeFlags & BATTLE_TYPE_LINK))
     {
         CalculatePlayerPartyCount();

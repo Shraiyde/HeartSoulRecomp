@@ -25,6 +25,7 @@
 #include "trainer_hill.h"
 #include "test_runner.h"
 #include "platform.h"
+#include "coop.h"
 #include "constants/rgb.h"
 
 static void VBlankIntr(void);
@@ -221,6 +222,9 @@ static void InitMainCallbacks(void)
 
 static void CallCallbacks(void)
 {
+#ifdef PORTABLE
+    Coop_Frame();
+#endif
     if (gMain.callback1)
         gMain.callback1();
 
