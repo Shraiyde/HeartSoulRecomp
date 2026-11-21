@@ -22,6 +22,7 @@ import java.util.Locale;
 final class StartScreenView extends View {
     interface Listener {
         void onStartGame(Settings settings);
+        void onJoinPcHost(Settings settings);
     }
 
     // Design size in GBA pixels that the scale is chosen from.
@@ -96,6 +97,8 @@ final class StartScreenView extends View {
     private int row = ROW_START;
     private int pressedRow = -1;
     private boolean started;
+    private boolean joinSelected;
+    private final RectF joinRect = new RectF();
     /** The pixel scale of the current draw. */
     private int s = 1;
 
@@ -292,9 +295,20 @@ final class StartScreenView extends View {
     }
 
     private void drawStartButton(Canvas canvas, int left, int top, int right, int bottom) {
-        boolean selected = row == ROW_START;
-        boolean pressed = pressedRow == ROW_START;
-        rowRects[ROW_START].set(left, top, right, bottom);
+        int gap = GAP * s;
+        int mid = (left + right) / 2;
+        int startRight = mid - gap / 2;
+        int joinLeft = mid + gap / 2;
+        rowRects[ROW_START].set(left, top, startRight, bottom);
+        joinRect.set(joinLeft, top, right, bottom);
+        drawActionButton(canvas, left, top, startRight, bottom, "START GAME",
+                row == ROW_START && !joinSelected, pressedRow == ROW_START);
+        drawActionButton(canvas, joinLeft, top, right, bottom, "JOIN PC HOST",
+                row == ROW_START && joinSelected, pressedRow == -2);
+    }
+
+    private void drawActionButton(Canvas canvas, int left, int top, int right, int bottom,
+                                  String labelText, boolean selected, boolean pressed) {
         int inset = 2 * s;
         if (selected) {
             window(canvas, left, top, right, bottom, COLOR_CURSOR, COLOR_CURSOR);
@@ -307,7 +321,7 @@ final class StartScreenView extends View {
         if (!pressed) {
             rect(canvas, bLeft + s, bBottom - 3 * s, bRight - s, bBottom - s, COLOR_START);
         }
-        GbaText.Fit label = GbaText.fit(gba.main, "START GAME", bRight - bLeft - 4 * s, bBottom - bTop, 2 * s, s, s);
+        GbaText.Fit label = GbaText.fit(gba.main, labelText, bRight - bLeft - 4 * s, bBottom - bTop, 2 * s, s, s);
         GbaText.drawCentered(canvas, label, (bLeft + bRight - label.width) / 2, (bTop + bBottom - 2 * s) / 2,
                 TEXT_DARK, SHADOW_DARK);
     }
@@ -373,7 +387,11 @@ final class StartScreenView extends View {
                 }
                 break;
             default:
-                first = "Changes apply when the game starts.";
+                if (joinSelected) {
+                    first = "One tap joins the PC over ZeroTier. Nothing to type.";
+                } else {
+                    first = "Changes apply when the game starts.";
+                }
                 break;
         }
         return new String[] { first, numbers() };
@@ -465,6 +483,14 @@ final class StartScreenView extends View {
         listener.onStartGame(settings);
     }
 
+    private void joinPcHost() {
+        if (started) {
+            return;
+        }
+        started = true;
+        listener.onJoinPcHost(settings);
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         boolean repeat = event.getRepeatCount() > 0;
@@ -478,10 +504,20 @@ final class StartScreenView extends View {
                 invalidate();
                 return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                change(-1);
+                if (row == ROW_START) {
+                    joinSelected = false;
+                    invalidate();
+                } else {
+                    change(-1);
+                }
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                change(1);
+                if (row == ROW_START) {
+                    joinSelected = true;
+                    invalidate();
+                } else {
+                    change(1);
+                }
                 return true;
             case KeyEvent.KEYCODE_BUTTON_A:
             case KeyEvent.KEYCODE_DPAD_CENTER:
@@ -489,7 +525,11 @@ final class StartScreenView extends View {
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
                 if (!repeat) {
                     if (row == ROW_START) {
-                        start();
+                        if (joinSelected) {
+                            joinPcHost();
+                        } else {
+                            start();
+                        }
                     } else {
                         change(1);
                     }
@@ -524,17 +564,29 @@ final class StartScreenView extends View {
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                pressedRow = rowAt(event.getX(), event.getY());
-                if (pressedRow >= 0) {
-                    row = pressedRow;
+                if (joinRect.contains(event.getX(), event.getY())) {
+                    pressedRow = -2;
+                    row = ROW_START;
+                    joinSelected = true;
+                } else {
+                    pressedRow = rowAt(event.getX(), event.getY());
+                    if (pressedRow >= 0) {
+                        row = pressedRow;
+                        if (pressedRow == ROW_START) {
+                            joinSelected = false;
+                        }
+                    }
                 }
                 invalidate();
                 return true;
             case MotionEvent.ACTION_UP: {
+                boolean joinTouch = joinRect.contains(event.getX(), event.getY());
                 int released = rowAt(event.getX(), event.getY());
                 int was = pressedRow;
                 pressedRow = -1;
-                if (released >= 0 && released == was) {
+                if (joinTouch && was == -2) {
+                    joinPcHost();
+                } else if (released >= 0 && released == was) {
                     if (released == ROW_START) {
                         start();
                     } else {

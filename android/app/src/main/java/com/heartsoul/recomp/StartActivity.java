@@ -22,7 +22,7 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (HeartSoulActivity.isRunning()) {
-            launchGame();
+            launchGame(false);
             return;
         }
         Display display = getWindowManager().getDefaultDisplay();
@@ -40,11 +40,19 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
     @Override
     public void onStartGame(Settings settings) {
         settings.save(this);
-        launchGame();
+        launchGame(false);
     }
 
-    private void launchGame() {
-        startActivity(new Intent(this, HeartSoulActivity.class));
+    @Override
+    public void onJoinPcHost(Settings settings) {
+        settings.save(this);
+        launchGame(true);
+    }
+
+    private void launchGame(boolean joinPcHost) {
+        Intent intent = new Intent(this, HeartSoulActivity.class);
+        intent.putExtra(HeartSoulActivity.EXTRA_JOIN_PC_HOST, joinPcHost);
+        startActivity(intent);
         overridePendingTransition(0, 0);
         finish();
     }

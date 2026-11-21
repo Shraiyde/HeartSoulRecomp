@@ -6,6 +6,6 @@
 // it from here for the app's versionName, so this is the one place to change
 // it for a release. Digits, dots and the letters the title font has
 // (C D E M O P R V) are drawn; anything else is left out.
-#define HNS_PORT_VERSION "0.4.0"
+#define HNS_PORT_VERSION "0.5.0"
 
 #endif // GUARD_PORT_VERSION_H

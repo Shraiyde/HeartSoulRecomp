@@ -24,6 +24,7 @@ import org.libsdl.app.SDLActivity;
  * game, so a game launched without the start screen still uses them.
  */
 public class HeartSoulActivity extends SDLActivity {
+    static final String EXTRA_JOIN_PC_HOST = "joinPcHost";
     private static final String TAG = "HeartSoul";
     private static final long POLL_INTERVAL_MS = 100;
     private static final int DISPLAY_CHECK_TICKS = 10; // look for a display once a second
@@ -124,6 +125,13 @@ public class HeartSoulActivity extends SDLActivity {
         display.getRealSize(size);
         Settings settings = Settings.load(this, size.x, size.y);
         settings.applyToEnvironment();
+        if (getIntent().getBooleanExtra(EXTRA_JOIN_PC_HOST, false)) {
+            try {
+                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
+            } catch (android.system.ErrnoException e) {
+                Log.w(TAG, "could not arm PC host join", e);
+            }
+        }
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);

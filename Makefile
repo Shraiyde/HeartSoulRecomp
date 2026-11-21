@@ -201,7 +201,7 @@ ifeq ($(PORTABLE),1)
     BUILD_FEXTENSION := .exe
   else
     OS_CFLAGS :=
-    OS_LFLAGS := -no-pie
+    OS_LFLAGS := -no-pie -pthread
   endif
 
   #Windows only
