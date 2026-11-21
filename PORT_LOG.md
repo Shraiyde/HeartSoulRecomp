@@ -55,10 +55,17 @@ upstream `167aa6d53` (2.0.6) and with this port.
   this port. The partner's lead is the stand-in for a shared trainer battle.
 - Link-cable stubs stay as they were.
 
+### Release
+
+- Tag `recomp-coop-1` is `77df6dc8b1`. The tag workflow
+  https://github.com/Shraiyde/HeartSoulRecomp/actions/runs/44929485832
+  finished green and published the release.
+- APK: https://github.com/Shraiyde/HeartSoulRecomp/releases/download/recomp-coop-1/HeartSoulRecomp-recomp-coop-1.apk
+  HTTP 200, 97,568,648 bytes. Release page:
+  https://github.com/Shraiyde/HeartSoulRecomp/releases/tag/recomp-coop-1
+
 ### Next
 
-- Wait until the Co-op APK workflow is green, then tag `recomp-coop-1`
-  and confirm the release APK URL returns HTTP 200.
 - Stephen plays that APK on the Thor. No blind adb input.
 
 ---
