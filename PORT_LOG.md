@@ -40,8 +40,9 @@ upstream `167aa6d53` (2.0.6) and with this port.
   same tile.
 - The APK job's native compile (32-bit and 64-bit, including `coop.c` and
   `sdl2.c`) succeeded on run 44925213115. Gradle then died on Maven Central
-  HTTP 429. The build now uses the Google Maven Central mirror, retries
-  dependency downloads, and retries the assemble step.
+  HTTP 429. The build uses the Google Maven Central mirror and retries only
+  that rate limit. The Android library also needs the SDL2 submodule, which
+  checkout now fetches.
 
 ### Not applicable here
 

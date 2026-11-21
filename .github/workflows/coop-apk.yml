@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Java
         uses: actions/setup-java@v4
@@ -67,14 +69,22 @@ jobs:
           touch .histignore
           # Maven Central answers 429 when many runners resolve the Android
           # plugin at once. The native objects stay on disk, so a retry only
-          # repeats the Gradle download.
+          # repeats the Gradle download. Other failures are not retried.
           ok=0
           for attempt in 1 2 3 4 5; do
-            if port/build-apk.sh; then
+            set +e
+            port/build-apk.sh 2>&1 | tee "$RUNNER_TEMP/assemble.log"
+            code=${PIPESTATUS[0]}
+            set -e
+            if [ "$code" = 0 ]; then
               ok=1
               break
             fi
-            echo "assemble attempt ${attempt} failed; waiting before retry"
+            if ! grep -q '429' "$RUNNER_TEMP/assemble.log"; then
+              echo "assemble failed for a reason other than rate limiting"
+              exit "$code"
+            fi
+            echo "assemble attempt ${attempt} was rate limited; waiting before retry"
             sleep $((attempt * 20))
           done
           test "$ok" = 1
