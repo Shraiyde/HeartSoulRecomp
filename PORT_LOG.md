@@ -13,6 +13,55 @@ Rules for this log:
 
 ---
 
+## 2026-11-21, co-op coverage and APK compile
+
+State at end of session: still not played on a phone or emulator. Compared
+`Shraiyde/pokehns-expansion` `268417e60` (hns-coop-135 / mailbox v14) with
+upstream `167aa6d53` (2.0.6) and with this port.
+
+### Done
+
+- The shared flag and var lists already matched the co-op flag audit
+  (story hides, badges, trainers, HMs, safari expansions, Alola totem
+  gates, monotonic vars). Legendaries, item balls, gifts, and phone-gift
+  vars stay on each save.
+- A script or cutscene on one phone locks the other phone's field controls
+  on the same map and pauses the partner sprite. Wild encounters and
+  trainer approach wait until that script ends. Opening the bag does not
+  lock the other phone.
+- Wild, safari, ghost, and legendary battles clear the co-op battle bit.
+  Each player fights those alone.
+- Joined trainer battles still use the partner's lead as an AI ally.
+  Nuzlocke faint rules apply to this save's Pokémon and skip the injected
+  lead. After the battle the real party is put back, with EXP kept on the
+  mons that fought. The pre-battle snapshot is no longer overwritten when
+  battle init runs a second time.
+- The partner's follower stands one tile behind them instead of on the
+  same tile.
+- The APK job's native compile (32-bit and 64-bit, including `coop.c` and
+  `sdl2.c`) succeeded on run 44925213115. Gradle then died on Maven Central
+  HTTP 429. The build now uses the Google Maven Central mirror, retries
+  dependency downloads, and retries the assemble step.
+
+### Not applicable here
+
+- Battle Tower Link Multi, Safari engineer text, and New Sinjoh script
+  mirrors. Those are map scripts and flags (`FLAG_COOP_TOWER_LINK_MULTI_*`,
+  `FLAG_RECEIVED_HM_WHIRLPOOL`) that exist only in the co-op ROM fork, not
+  in this 2.0.6 data set. Adding them would change the GBA ROM.
+- Cable-link party merge and trading over the co-op socket. The World Host
+  protocol has no trade payload, and `BATTLE_TYPE_LINK` does not run in
+  this port. The partner's lead is the stand-in for a shared trainer battle.
+- Link-cable stubs stay as they were.
+
+### Next
+
+- Wait until the Co-op APK workflow is green, then tag `recomp-coop-1`
+  and confirm the release APK URL returns HTTP 200.
+- Stephen plays that APK on the Thor. No blind adb input.
+
+---
+
 ## 2026-11-21, native co-op client
 
 State at end of session: co-op is in the tree and has not been played. No
