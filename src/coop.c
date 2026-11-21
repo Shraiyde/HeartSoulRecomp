@@ -400,7 +400,6 @@ static void GrantProgressItem(u16 flagId)
     case FLAG_RECEIVED_HM_ROCK_SMASH: itemId = ITEM_HM_ROCK_SMASH; break;
     case FLAG_RECEIVED_HM_STRENGTH: itemId = ITEM_HM_STRENGTH; break;
     case FLAG_RECEIVED_HM_SURF: itemId = ITEM_HM_SURF; break;
-    case FLAG_RECEIVED_HM_WHIRLPOOL: itemId = ITEM_HM_WHIRLPOOL; break;
     case FLAG_ITEM_ICEPATH1_HM_WATERFALL: itemId = ITEM_HM_WATERFALL; break;
     case FLAG_GOT_SUPER_ROD: itemId = ITEM_SUPER_ROD; break;
     default:
