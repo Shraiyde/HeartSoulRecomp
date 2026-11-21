@@ -15,6 +15,7 @@
 #include "constants/pokedex.h"
 #include "battle.h"
 #include "bug_contest.h"
+#include "coop.h"
 
 EWRAM_DATA u8 NuzlockeIsCaptureBlocked = FALSE;
 EWRAM_DATA u8 NuzlockeIsSpeciesClauseActive = FALSE;
@@ -375,6 +376,10 @@ void NuzlockeDeleteFaintedPartyPokemon(void)
     for (i = 0; i < PARTY_SIZE; i++)
     {
         pokemon = &gPlayerParty[i];
+        /* A joined trainer battle parks the partner's lead in this party.
+         * That Pokémon is not this save's, so a faint is not a Nuzlocke death. */
+        if (!Coop_OwnsBattleMon(pokemon))
+            continue;
         if (GetMonData(pokemon, MON_DATA_SANITY_HAS_SPECIES, NULL)
             && !GetMonData(pokemon, MON_DATA_IS_EGG, NULL))
         {
@@ -386,6 +391,7 @@ void NuzlockeDeleteFaintedPartyPokemon(void)
                     AddBagItem(monItem, 1);
                     SetMonData(pokemon, MON_DATA_HELD_ITEM, &item);
                 }
+                Coop_DropSavedMon(pokemon);
                 if (IsNuzlockeEasyActive())
                     NuzlockeDeletePartyMonOption(i);
                 else

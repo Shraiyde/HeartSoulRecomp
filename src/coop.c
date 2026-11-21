@@ -86,6 +86,12 @@ static EWRAM_DATA bool8 sTrainerABeaten;
 static EWRAM_DATA bool8 sTrainerBBeaten;
 static EWRAM_DATA u32 sConfigSeq;
 static EWRAM_DATA u8 sConfigAckWait;
+static EWRAM_DATA bool8 sLockedForPartner;
+
+#define COOP_SIO_FIELD  1u
+#define COOP_SIO_SCRIPT 2u
+
+static void MaintainScriptLock(void);
 
 static const u16 sSharedVars[] =
 {
@@ -768,7 +774,14 @@ static void PublishPosition(void)
     avatar = lower | ((u32)sClaimSeq << 24);
     words[0] = (u32)gSaveBlock1Ptr->location.mapGroup
         | ((u32)gSaveBlock1Ptr->location.mapNum << 16);
-    words[1] = sInBattle ? 0 : 1;
+    words[1] = 0;
+    if (!sInBattle)
+        words[1] |= COOP_SIO_FIELD;
+    /* Bit 1 tells the partner this phone is inside a script or cutscene.
+     * A lock we applied because THEY are in a script must not echo back. */
+    if (!sInBattle && gMain.callback2 == CB2_Overworld
+        && ScriptContext_IsEnabled() && !sLockedForPartner)
+        words[1] |= COOP_SIO_SCRIPT;
     words[2] = (u32)(u16)obj->currentCoords.x;
     words[3] = (u32)(u16)obj->currentCoords.y;
     words[4] = gSaveBlock2Ptr->playerGender;
@@ -828,6 +841,20 @@ static u8 SpawnAt(u8 slot, u8 localId, u16 graphicsId, s16 x, s16 y, u8 elevatio
         return OBJECT_EVENTS_COUNT;
     }
     return id;
+}
+
+static void TileBehind(s16 x, s16 y, u8 facing, s16 *outX, s16 *outY)
+{
+    *outX = x;
+    *outY = y;
+    if (facing == DIR_NORTH)
+        (*outY)++;
+    else if (facing == DIR_SOUTH)
+        (*outY)--;
+    else if (facing == DIR_WEST)
+        (*outX)++;
+    else if (facing == DIR_EAST)
+        (*outX)--;
 }
 
 static void StepToward(struct ObjectEvent *obj, s16 x, s16 y, u8 avatarClass)
@@ -964,6 +991,9 @@ static void MaintainPartner(void)
             UpdatePartner(&remote);
             return;
         }
+        /* Hold still through a cutscene so the sprite does not walk through it. */
+        if (Coop_BlockFieldEvent())
+            return;
         StepToward(obj, (s16)remote.x, (s16)remote.y, avatarClass);
         if ((u8)remote.facing != 0 && obj->currentCoords.x == (s16)remote.x && obj->currentCoords.y == (s16)remote.y)
             SetObjectEventDirection(obj, (u8)remote.facing);
@@ -974,7 +1004,11 @@ static void MaintainPartner(void)
             if (!follow->active || follow->localId != COOP_LOCAL_FOLLOWER || follow->graphicsId != followGfx)
                 UpdatePartner(&remote);
             else
-                StepToward(follow, obj->currentCoords.x, obj->currentCoords.y, PLAYER_AVATAR_STATE_NORMAL);
+            {
+                s16 fx, fy;
+                TileBehind(obj->currentCoords.x, obj->currentCoords.y, obj->facingDirection, &fx, &fy);
+                StepToward(follow, fx, fy, PLAYER_AVATAR_STATE_NORMAL);
+            }
         }
         else
         {
@@ -1084,8 +1118,25 @@ bool8 Coop_PartnersNearby(void)
     return (dx + dy) <= 12 && sPartnerLeadValid;
 }
 
+bool8 Coop_BlockFieldEvent(void)
+{
+    struct CoopRemoteView remote;
+
+    if (!sSessionLive || !CoopNet_IsUp())
+        return FALSE;
+    /* Our own script. The lock we took for the partner is not one of those. */
+    if (ScriptContext_IsEnabled() && !sLockedForPartner)
+        return TRUE;
+    CoopNet_CopyRemote(&remote);
+    if (!remote.valid || remote.ageMs > 3000)
+        return FALSE;
+    return (remote.sio & COOP_SIO_SCRIPT) != 0;
+}
+
 bool8 Coop_BlockTrainerApproach(void)
 {
+    if (Coop_BlockFieldEvent())
+        return TRUE;
     return sSessionLive && CoopNet_IsUp() && !Coop_IsStorySyncReady();
 }
 
@@ -1226,22 +1277,140 @@ void Coop_Frame(void)
     if (CoopNet_PartnerAgeMs() < 2000)
         sHadPartner = TRUE;
     WatchBattle();
+    MaintainScriptLock();
     MaintainPartner();
     if (sInBattle && !sAbort && !gMain.inBattle)
         sInBattle = FALSE;
+}
+
+static void ReleasePartnerLock(void)
+{
+    if (!sLockedForPartner)
+        return;
+    sLockedForPartner = FALSE;
+    if (!ScriptContext_IsEnabled())
+        UnlockPlayerFieldControls();
+}
+
+static void MaintainScriptLock(void)
+{
+    struct CoopRemoteView remote;
+    bool8 remoteScript;
+
+    if (!sSessionLive || !CoopNet_IsUp())
+    {
+        ReleasePartnerLock();
+        return;
+    }
+    /* A menu or battle hides the field. Leave the latch set so coming back
+     * does not unlock a cutscene that is still running. */
+    if (gMain.callback2 != CB2_Overworld)
+        return;
+    CoopNet_CopyRemote(&remote);
+    remoteScript = remote.valid && remote.ageMs <= 3000 && (remote.sio & COOP_SIO_SCRIPT) != 0;
+    if (remoteScript && !sLockedForPartner && !ArePlayerFieldControlsLocked())
+    {
+        LockPlayerFieldControls();
+        sLockedForPartner = TRUE;
+    }
+    else if (!remoteScript)
+    {
+        ReleasePartnerLock();
+    }
+}
+
+static bool8 SameMonIdentity(struct Pokemon *a, struct Pokemon *b)
+{
+    if (!GetMonData(a, MON_DATA_SANITY_HAS_SPECIES, NULL))
+        return FALSE;
+    if (!GetMonData(b, MON_DATA_SANITY_HAS_SPECIES, NULL))
+        return FALSE;
+    return GetMonData(a, MON_DATA_PERSONALITY, NULL) == GetMonData(b, MON_DATA_PERSONALITY, NULL)
+        && GetMonData(a, MON_DATA_OT_ID, NULL) == GetMonData(b, MON_DATA_OT_ID, NULL);
+}
+
+bool8 Coop_OwnsBattleMon(struct Pokemon *mon)
+{
+    u32 i;
+
+    if (!(gBattleTypeFlags & BATTLE_TYPE_COOP) || !sPartySaved || mon == NULL)
+        return TRUE;
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (SameMonIdentity(mon, &sPartyBackup[i]))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+void Coop_DropSavedMon(struct Pokemon *mon)
+{
+    u32 i, j;
+
+    if (!sPartySaved || mon == NULL)
+        return;
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (!SameMonIdentity(mon, &sPartyBackup[i]))
+            continue;
+        for (j = i; j + 1 < PARTY_SIZE; j++)
+            sPartyBackup[j] = sPartyBackup[j + 1];
+        ZeroMonData(&sPartyBackup[PARTY_SIZE - 1]);
+        if (sPartyCountBackup > 0)
+            sPartyCountBackup--;
+        return;
+    }
+}
+
+void Coop_FinishSharedBattle(void)
+{
+    struct Pokemon next[PARTY_SIZE];
+    u32 n = 0;
+    u32 i, j;
+
+    if (!sPartySaved || !(gBattleTypeFlags & BATTLE_TYPE_COOP))
+        return;
+    memset(next, 0, sizeof(next));
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        bool8 found = FALSE;
+        if (!GetMonData(&sPartyBackup[i], MON_DATA_SANITY_HAS_SPECIES, NULL))
+            continue;
+        for (j = 0; j < PARTY_SIZE; j++)
+        {
+            if (!SameMonIdentity(&gPlayerParty[j], &sPartyBackup[i]))
+                continue;
+            next[n++] = gPlayerParty[j];
+            found = TRUE;
+            break;
+        }
+        if (!found && n < PARTY_SIZE)
+            next[n++] = sPartyBackup[i];
+    }
+    for (i = 0; i < PARTY_SIZE; i++)
+        gPlayerParty[i] = next[i];
+    CalculatePlayerPartyCount();
+    sPartySaved = FALSE;
 }
 
 void Coop_OnBattleStarted(void)
 {
     struct ObjectEvent *obj;
     u32 i;
+    bool8 keepSnapshot;
 
     sBattleHadLink = CoopNet_IsUp();
     if (!sBattleHadLink)
         return;
+    keepSnapshot = sInBattle && sPartySaved;
     sInBattle = TRUE;
     sAbort = FALSE;
     sAbortSent = FALSE;
+    /* PrepareSharedTrainerBattle already snapped the real party, then
+     * injected the partner lead. A second call from battle init must not
+     * photograph that temporary lead. */
+    if (keepSnapshot)
+        return;
     sPartyCountBackup = gPlayerPartyCount;
     for (i = 0; i < PARTY_SIZE; i++)
         sPartyBackup[i] = gPlayerParty[i];

@@ -540,6 +540,10 @@ const u8 *const gStatusConditionStringsTable[][2] =
 void CB2_InitBattle(void)
 {
 #ifdef PORTABLE
+    /* Wild, safari, and legendary fights stay on this phone. A joined
+     * trainer battle already set BATTLE_TYPE_COOP before this runs. */
+    if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+        gBattleTypeFlags &= ~(BATTLE_TYPE_COOP | BATTLE_TYPE_LINK);
     Coop_OnBattleStarted();
 #endif
     if (!gTestRunnerEnabled)
@@ -5930,7 +5934,8 @@ static void HandleEndTurn_FinishBattle(void)
                                         | BATTLE_TYPE_TOWER_LINK_MULTI
                                         | BATTLE_TYPE_RECORDED_LINK
                                         | BATTLE_TYPE_FRONTIER
-                                        | BATTLE_TYPE_TRAINER_HILL)))
+                                        | BATTLE_TYPE_TRAINER_HILL))
+                || (gBattleTypeFlags & BATTLE_TYPE_COOP))
                 NuzlockeDeleteFaintedPartyPokemon();
         }
         if (!Coop_BattleAbortPending() && IsNuzlockeActive())
@@ -5943,7 +5948,8 @@ static void HandleEndTurn_FinishBattle(void)
                                         | BATTLE_TYPE_TOWER_LINK_MULTI
                                         | BATTLE_TYPE_RECORDED_LINK
                                         | BATTLE_TYPE_FRONTIER
-                                        | BATTLE_TYPE_TRAINER_HILL)))
+                                        | BATTLE_TYPE_TRAINER_HILL))
+                || (gBattleTypeFlags & BATTLE_TYPE_COOP))
                 NuzlockeDeleteFaintedPartyPokemon();
             if (!(gBattleTypeFlags & (BATTLE_TYPE_DOUBLE
                                         | BATTLE_TYPE_LINK
@@ -5972,6 +5978,9 @@ static void HandleEndTurn_FinishBattle(void)
             NuzlockeIsSpeciesClauseActive = FALSE;
             OneTypeChallengeCaptureBlocked = FALSE;
         }
+
+        if (!Coop_BattleAbortPending())
+            Coop_FinishSharedBattle();
 
         BeginFastPaletteFade(3);
         FadeOutMapMusic(5);

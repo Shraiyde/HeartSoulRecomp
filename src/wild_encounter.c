@@ -1,5 +1,6 @@
 #include "global.h"
 #include "battle_setup.h"
+#include "coop.h"
 #include "battle_pike.h"
 #include "battle_pyramid.h"
 #include "event_data.h"
@@ -786,6 +787,10 @@ bool8 StandardWildEncounter(u16 curMetatileBehavior, u16 prevMetatileBehavior)
     struct Roamer *roamer;
 
     if (sWildEncountersDisabled == TRUE)
+        return FALSE;
+    /* Each player finds their own wild Pokémon. A cutscene on either phone
+     * holds this check so a battle does not start under the script. */
+    if (Coop_BlockFieldEvent())
         return FALSE;
 
     headerId = GetCurrentMapWildMonHeaderId();

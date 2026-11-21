@@ -28,6 +28,14 @@ void Coop_OnVarChanged(u16 varId, u16 value);
 bool8 Coop_IsReservedPresenceObjectEventId(u8 objectEventId);
 bool8 Coop_IsCoopLocalId(u8 localId);
 u8 Coop_TakePreferredObjectEventId(void);
+/* True while this player, or the partner on this map, is inside a script.
+ * Wild encounters and trainer approach wait. */
+bool8 Coop_BlockFieldEvent(void);
+/* The injected partner lead is not one of this save's Pokémon. */
+bool8 Coop_OwnsBattleMon(struct Pokemon *mon);
+void Coop_DropSavedMon(struct Pokemon *mon);
+/* Puts the real party back, keeping EXP on the mons that fought. */
+void Coop_FinishSharedBattle(void);
 
 #else
 
@@ -53,6 +61,10 @@ static inline void Coop_OnVarChanged(u16 varId, u16 value) { (void)varId; (void)
 static inline bool8 Coop_IsReservedPresenceObjectEventId(u8 objectEventId) { (void)objectEventId; return FALSE; }
 static inline bool8 Coop_IsCoopLocalId(u8 localId) { (void)localId; return FALSE; }
 static inline u8 Coop_TakePreferredObjectEventId(void) { return 0; }
+static inline bool8 Coop_BlockFieldEvent(void) { return FALSE; }
+static inline bool8 Coop_OwnsBattleMon(struct Pokemon *mon) { (void)mon; return TRUE; }
+static inline void Coop_DropSavedMon(struct Pokemon *mon) { (void)mon; }
+static inline void Coop_FinishSharedBattle(void) {}
 
 #endif
 
