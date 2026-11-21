@@ -1,0 +1,82 @@
+name: Co-op APK
+
+# Compiles the native port. A GitHub release is published only from the
+# recomp-coop-1 tag, after the co-op work is complete. Branch pushes are
+# compile checks and do not upload a release asset.
+
+on:
+  push:
+    branches:
+      - port
+      - cursor/native-coop-cf76
+    tags:
+      - recomp-coop-1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: coop-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Android packages
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "ndk;27.2.12479018"
+
+      - name: Build image
+        run: docker build -t hns-port port/docker
+
+      - name: Assemble debug APK
+        run: |
+          set -euo pipefail
+          chmod +x port/*.sh android/gradlew
+          port/build-apk.sh
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+            "$RUNNER_TEMP/HeartSoulRecomp-recomp-coop-1.apk"
+          ls -lh "$RUNNER_TEMP/HeartSoulRecomp-recomp-coop-1.apk"
+
+      - name: Upload compile artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: heartsoul-recomp-debug-apk
+          path: ${{ runner.temp }}/HeartSoulRecomp-recomp-coop-1.apk
+          if-no-files-found: error
+
+      - name: Publish release
+        if: github.ref == 'refs/tags/recomp-coop-1'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: recomp-coop-1
+          name: Heart & Soul native co-op 1
+          files: ${{ runner.temp }}/HeartSoulRecomp-recomp-coop-1.apk
+          body: |
+            Native Heart & Soul co-op. One tap on Join PC Host connects both phones
+            to the Windows World Host over ZeroTier. No PIN and no relay.
+            The existing HeartSoulWorldHost zip (world-host-13 or world-host-14)
+            speaks this protocol.
+          draft: false
+          prerelease: false
+          make_latest: true

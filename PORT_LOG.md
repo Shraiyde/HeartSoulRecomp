@@ -13,6 +13,53 @@ Rules for this log:
 
 ---
 
+## 2026-11-21, native co-op client
+
+State at end of session: co-op is in the tree and has not been played. No
+phone, emulator, or headless game run. The compile check is the Co-op APK
+workflow. A GitHub release is published only from the tag `recomp-coop-1`,
+and only after that workflow is green.
+
+### Done
+
+- Native World Host client (`src/platform/coop_net.c`, `coop_aes.c`). One TCP
+  socket to the baked ZeroTier address, port 27770. HELLO / READY, then
+  length-prefixed AES-256-GCM frames with the host stamp (sender 2). The
+  join secret is the XOR-obfuscated array shared with world-host-13/14.
+  Nothing secret is logged. No mailbox, MQTT, TURN, or Tailscale.
+- The socket stays up through short stalls. It does not open a second
+  connection while one is up. After a real drop it resumes that same client
+  id once, then stops.
+- Game session (`src/coop.c`): shared story flags and vars (the same set the
+  emulator co-op treated as shared), partner plus follower in reserved
+  object slots, rebuilt whenever the overworld is showing, including after
+  the sprite was destroyed. Widescreen and tall use the same object camera
+  as the player.
+- A link that was up at the start of a battle, and then drops or goes quiet,
+  ends that battle for both players. Party, money, tile, and facing are put
+  back. The trainer flag is cleared if this battle was what set it. The
+  battle is not resumed. A later solo battle, after the link is already
+  down, plays normally.
+- Start screen: JOIN PC HOST, one tap. Sets `HNS_COOP_JOIN=1` for that
+  launch. Link-cable code was not retargeted.
+
+### Known
+
+- Stephen has not played this build. Do not call it working until he has.
+- Ruleset blob is applied only before the adventure flag is set, so a
+  mid-save join does not rewrite a challenge.
+- Legendary and personal gift flags stay local, matching the earlier co-op.
+
+### Next
+
+1. Stephen installs the `recomp-coop-1` APK and joins the PC World Host.
+2. Two phones, same map: partner and their Pokémon stay visible through a
+   door, a battle, and a menu.
+3. Pull the cable mid-battle: both return to the tile they were on, no
+   white-out and no prize money.
+
+---
+
 ## 2026-10-11, session 8: every PokeDaisy tab, smart fast forward, v0.4.0
 
 State at end of session: **v0.4.0 published as the Latest release**, asset
