@@ -42,6 +42,13 @@ and only after that workflow is green.
   down, plays normally.
 - Start screen: JOIN PC HOST, one tap. Sets `HNS_COOP_JOIN=1` for that
   launch. Link-cable code was not retargeted.
+- Trainer fights wait until the shared story snapshot has finished. If both
+  players are in a trainer's sight, role 0 starts the battle and role 1
+  does not, so it is not fought twice. When the partner is nearby their
+  lead Pokémon joins as the second battler (double, no link cable). Wild
+  battles stay solo. The bottom screen shows P2 while the partner is on
+  the same map. A won co-op battle keeps this player's own experience and
+  puts the partner's borrowed Pokémon back.
 
 ### Known
 

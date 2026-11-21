@@ -8,6 +8,14 @@
 
 #ifdef PORTABLE
 
+bool8 Coop_IsStorySyncReady(void);
+bool8 Coop_PartnersNearby(void);
+bool8 Coop_BlockTrainerApproach(void);
+u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance);
+void Coop_PrepareSharedTrainerBattle(void);
+void Coop_RestoreSharedBattleParty(bool8 fullRestore);
+bool8 Coop_PartnerVisible(void);
+bool8 Coop_CopyPartnerTile(s16 *x, s16 *y);
 void Coop_Boot(void);
 void Coop_Frame(void);
 void Coop_OnBattleStarted(void);
@@ -23,6 +31,18 @@ u8 Coop_TakePreferredObjectEventId(void);
 
 #else
 
+static inline bool8 Coop_IsStorySyncReady(void) { return FALSE; }
+static inline bool8 Coop_PartnersNearby(void) { return FALSE; }
+static inline bool8 Coop_BlockTrainerApproach(void) { return FALSE; }
+static inline u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
+{
+    (void)partnerDistance;
+    return localDistance;
+}
+static inline void Coop_PrepareSharedTrainerBattle(void) {}
+static inline void Coop_RestoreSharedBattleParty(bool8 fullRestore) { (void)fullRestore; }
+static inline bool8 Coop_PartnerVisible(void) { return FALSE; }
+static inline bool8 Coop_CopyPartnerTile(s16 *x, s16 *y) { (void)x; (void)y; return FALSE; }
 static inline void Coop_Boot(void) {}
 static inline void Coop_Frame(void) {}
 static inline void Coop_OnBattleStarted(void) {}

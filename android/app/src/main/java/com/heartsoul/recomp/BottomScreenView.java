@@ -565,6 +565,13 @@ final class BottomScreenView extends View {
         int infoLeft = inRight - infoFit.width;
 
         // Fast forward: the game's arrow twice, on the left of the numbers.
+        if (state.partner) {
+            String mark = "P2";
+            int pillWidth = gba.small[0].width(mark) * s + 4 * s;
+            int pillLeft = infoLeft - 2 * GAP * s - pillWidth;
+            drawPill(canvas, mark, COLOR_FAST_FORWARD, pillLeft, center, pillWidth);
+            infoLeft = pillLeft;
+        }
         if (state.fastForward) {
             String arrows = "▶▶";
             int pillWidth = gba.small[0].width(arrows) * s + 4 * s;

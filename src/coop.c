@@ -64,6 +64,14 @@ static EWRAM_DATA bool8 sBattleHadLink;
 static EWRAM_DATA bool8 sAbort;
 static EWRAM_DATA bool8 sHadPartner;
 static EWRAM_DATA bool8 sAbortSent;
+static EWRAM_DATA bool8 sPartySaved;
+static EWRAM_DATA bool8 sPartnerLeadValid;
+static EWRAM_DATA u16 sPartnerSpecies;
+static EWRAM_DATA u8 sPartnerLevel;
+static EWRAM_DATA u16 sPartnerItem;
+static EWRAM_DATA u16 sPartnerMoves[4];
+static EWRAM_DATA u16 sPartnerHp;
+static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
 static EWRAM_DATA u8 sPartyCountBackup;
@@ -602,6 +610,19 @@ static void HandleInbound(void)
                     gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
             }
         }
+        else if (type == COOP_MSG_WORLD_CONFIG && len >= 20)
+        {
+            sPartnerSpecies = (u16)(payload[0] | (payload[1] << 8));
+            sPartnerLevel = payload[2];
+            sPartnerItem = (u16)(payload[4] | (payload[5] << 8));
+            sPartnerMoves[0] = (u16)(payload[6] | (payload[7] << 8));
+            sPartnerMoves[1] = (u16)(payload[8] | (payload[9] << 8));
+            sPartnerMoves[2] = (u16)(payload[10] | (payload[11] << 8));
+            sPartnerMoves[3] = (u16)(payload[12] | (payload[13] << 8));
+            sPartnerHp = (u16)(payload[14] | (payload[15] << 8));
+            sPartnerMaxHp = (u16)(payload[16] | (payload[17] << 8));
+            sPartnerLeadValid = sPartnerSpecies != SPECIES_NONE && sPartnerLevel != 0;
+        }
         else if (type == COOP_MSG_WORLD_RESYNC || type == COOP_MSG_POSITION_RESYNC)
         {
             ResetScan();
@@ -986,6 +1007,188 @@ static void WatchBattle(void)
     }
 }
 
+static void PublishLead(void)
+{
+    struct Pokemon *mon = &gPlayerParty[0];
+    u8 raw[20];
+    u32 i;
+    u16 species;
+    static u16 sLastSpecies;
+    static u8 sLastLevel;
+    static u8 sTicks;
+
+    if (gPlayerPartyCount == 0)
+        return;
+    for (i = 0; i < gPlayerPartyCount; i++)
+    {
+        if (GetMonData(&gPlayerParty[i], MON_DATA_HP) != 0
+            && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES) != SPECIES_NONE)
+        {
+            mon = &gPlayerParty[i];
+            break;
+        }
+    }
+    species = GetMonData(mon, MON_DATA_SPECIES);
+    if (species == sLastSpecies && GetMonData(mon, MON_DATA_LEVEL) == sLastLevel && (sTicks++ % 90) != 0)
+        return;
+    sLastSpecies = species;
+    sLastLevel = GetMonData(mon, MON_DATA_LEVEL);
+    memset(raw, 0, sizeof(raw));
+    raw[0] = (u8)species;
+    raw[1] = (u8)(species >> 8);
+    raw[2] = sLastLevel;
+    raw[4] = (u8)GetMonData(mon, MON_DATA_HELD_ITEM);
+    raw[5] = (u8)(GetMonData(mon, MON_DATA_HELD_ITEM) >> 8);
+    for (i = 0; i < 4; i++)
+    {
+        u16 move = GetMonData(mon, MON_DATA_MOVE1 + i);
+        raw[6 + i * 2] = (u8)move;
+        raw[7 + i * 2] = (u8)(move >> 8);
+    }
+    raw[14] = (u8)GetMonData(mon, MON_DATA_HP);
+    raw[15] = (u8)(GetMonData(mon, MON_DATA_HP) >> 8);
+    raw[16] = (u8)GetMonData(mon, MON_DATA_MAX_HP);
+    raw[17] = (u8)(GetMonData(mon, MON_DATA_MAX_HP) >> 8);
+    CoopNet_SendBytes(COOP_MSG_WORLD_CONFIG, raw, sizeof(raw));
+}
+
+bool8 Coop_IsStorySyncReady(void)
+{
+    return sSessionLive && sScanDone && sRemoteReady && sOutN == 0;
+}
+
+bool8 Coop_PartnersNearby(void)
+{
+    struct CoopRemoteView remote;
+    struct ObjectEvent *player;
+    s16 dx, dy;
+
+    if (!Coop_IsStorySyncReady())
+        return FALSE;
+    CoopNet_CopyRemote(&remote);
+    if (!remote.valid || remote.ageMs > 3000 || remote.sio == 0 || remote.x == 0)
+        return FALSE;
+    if (gPlayerAvatar.objectEventId >= OBJECT_EVENTS_COUNT)
+        return FALSE;
+    player = &gObjectEvents[gPlayerAvatar.objectEventId];
+    if (!player->active)
+        return FALSE;
+    if (remote.mapId != ((u32)gSaveBlock1Ptr->location.mapGroup
+        | ((u32)gSaveBlock1Ptr->location.mapNum << 16)))
+        return FALSE;
+    dx = player->currentCoords.x - (s16)remote.x;
+    dy = player->currentCoords.y - (s16)remote.y;
+    if (dx < 0)
+        dx = -dx;
+    if (dy < 0)
+        dy = -dy;
+    return (dx + dy) <= 12 && sPartnerLeadValid;
+}
+
+bool8 Coop_BlockTrainerApproach(void)
+{
+    return sSessionLive && CoopNet_IsUp() && !Coop_IsStorySyncReady();
+}
+
+u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
+{
+    int role;
+
+    if (!sSessionLive || !CoopNet_IsUp())
+        return localDistance;
+    if (!Coop_IsStorySyncReady())
+        return 0;
+    if (!Coop_PartnersNearby())
+        return localDistance;
+    role = CoopNet_Role();
+    if (localDistance != 0 && partnerDistance != 0)
+        return role == 1 ? 0 : localDistance;
+    if (localDistance != 0)
+        return localDistance;
+    if (partnerDistance != 0 && role == 0)
+        return partnerDistance;
+    return 0;
+}
+
+bool8 Coop_CopyPartnerTile(s16 *x, s16 *y)
+{
+    struct CoopRemoteView remote;
+
+    if (x == NULL || y == NULL)
+        return FALSE;
+    CoopNet_CopyRemote(&remote);
+    if (!remote.valid || remote.ageMs > 3000 || remote.x == 0)
+        return FALSE;
+    *x = (s16)remote.x;
+    *y = (s16)remote.y;
+    return TRUE;
+}
+
+void Coop_PrepareSharedTrainerBattle(void)
+{
+    u32 i;
+    u16 move;
+
+    if (!CoopNet_IsUp() || !Coop_PartnersNearby())
+        return;
+    if (!sInBattle)
+        Coop_OnBattleStarted();
+    if (!sInBattle)
+        return;
+    ZeroMonData(&gPlayerParty[MULTI_PARTY_SIZE]);
+    ZeroMonData(&gPlayerParty[MULTI_PARTY_SIZE + 1]);
+    ZeroMonData(&gPlayerParty[MULTI_PARTY_SIZE + 2]);
+    CreateMon(&gPlayerParty[MULTI_PARTY_SIZE], sPartnerSpecies, sPartnerLevel, 0,
+              OTID_STRUCT_RANDOM_NO_SHINY);
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        move = sPartnerMoves[i];
+        SetMonData(&gPlayerParty[MULTI_PARTY_SIZE], MON_DATA_MOVE1 + i, &move);
+    }
+    SetMonData(&gPlayerParty[MULTI_PARTY_SIZE], MON_DATA_HELD_ITEM, &sPartnerItem);
+    CalculateMonStats(&gPlayerParty[MULTI_PARTY_SIZE]);
+    if (sPartnerMaxHp != 0)
+        SetMonData(&gPlayerParty[MULTI_PARTY_SIZE], MON_DATA_MAX_HP, &sPartnerMaxHp);
+    if (sPartnerHp != 0)
+        SetMonData(&gPlayerParty[MULTI_PARTY_SIZE], MON_DATA_HP, &sPartnerHp);
+    gBattleTypeFlags |= BATTLE_TYPE_DOUBLE | BATTLE_TYPE_MULTI | BATTLE_TYPE_INGAME_PARTNER | BATTLE_TYPE_COOP;
+    sPartySaved = TRUE;
+}
+
+void Coop_RestoreSharedBattleParty(bool8 fullRestore)
+{
+    u32 i;
+
+    if (!sPartySaved)
+        return;
+    if (fullRestore)
+    {
+        gPlayerPartyCount = sPartyCountBackup;
+        for (i = 0; i < PARTY_SIZE; i++)
+            gPlayerParty[i] = sPartyBackup[i];
+    }
+    else
+    {
+        for (i = MULTI_PARTY_SIZE; i < PARTY_SIZE; i++)
+            gPlayerParty[i] = sPartyBackup[i];
+    }
+    CalculatePlayerPartyCount();
+    sPartySaved = FALSE;
+}
+
+bool8 Coop_PartnerVisible(void)
+{
+    struct CoopRemoteView remote;
+    u32 localMap;
+
+    CoopNet_CopyRemote(&remote);
+    if (!remote.valid || remote.ageMs > COOP_PARTNER_HIDE_MS || gSaveBlock1Ptr == NULL)
+        return FALSE;
+    localMap = (u32)gSaveBlock1Ptr->location.mapGroup
+        | ((u32)gSaveBlock1Ptr->location.mapNum << 16);
+    return remote.mapId == localMap && remote.x != 0;
+}
+
 void Coop_Boot(void)
 {
     CoopNet_Boot();
@@ -1019,6 +1222,7 @@ void Coop_Frame(void)
         AdvertiseReady();
         PublishConfig();
         PublishPosition();
+        PublishLead();
     }
     if (CoopNet_PartnerAgeMs() < 2000)
         sHadPartner = TRUE;
@@ -1087,6 +1291,7 @@ void Coop_LeaveAbortedBattle(void)
     sAbort = FALSE;
     sInBattle = FALSE;
     sBattleHadLink = FALSE;
+    Coop_RestoreSharedBattleParty(TRUE);
     gPlayerPartyCount = sPartyCountBackup;
     for (i = 0; i < PARTY_SIZE; i++)
         gPlayerParty[i] = sPartyBackup[i];

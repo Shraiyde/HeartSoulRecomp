@@ -1,4 +1,5 @@
 #include "global.h"
+#include "coop.h"
 #include "battle_setup.h"
 #include "event_data.h"
 #include "event_object_movement.h"
@@ -552,6 +553,12 @@ bool8 CheckForTrainersWantingBattle(void)
 static u8 CheckTrainer(u8 objectEventId)
 {
     const u8 *trainerBattlePtr;
+#ifdef PORTABLE
+    // Shared story flags are still arriving. Starting a trainer now would
+    // fight someone the other player has already beaten.
+    if (Coop_BlockTrainerApproach())
+        return 0;
+#endif
     u8 numTrainers = 1;
 
     u8 approachDistance = GetTrainerApproachDistance(&gObjectEvents[objectEventId]);
@@ -633,32 +640,49 @@ static u8 CheckTrainer(u8 objectEventId)
     return numTrainers;
 }
 
-static u8 GetTrainerApproachDistance(struct ObjectEvent *trainerObj)
+static u8 ApproachDistanceAt(struct ObjectEvent *trainerObj, s16 x, s16 y)
 {
-    s16 x, y;
     u8 i;
     u8 approachDistance;
 
-    PlayerGetDestCoords(&x, &y);
-    if (trainerObj->trainerType == TRAINER_TYPE_NORMAL)  // can only see in one direction
+    if (trainerObj->trainerType == TRAINER_TYPE_NORMAL)
     {
-        // Disable trainer approach while moving diagonally (usually moving on sideway stairs)
         if (trainerObj->facingDirection > DIR_EAST)
             return 0;
         approachDistance = sDirectionalApproachDistanceFuncs[trainerObj->facingDirection - 1](trainerObj, trainerObj->trainerRange_berryTreeId, x, y);
         return CheckPathBetweenTrainerAndPlayer(trainerObj, approachDistance, trainerObj->facingDirection);
     }
-    else // TRAINER_TYPE_SEE_ALL_DIRECTIONS, TRAINER_TYPE_BURIED
+    else
     {
         for (i = 0; i < ARRAY_COUNT(sDirectionalApproachDistanceFuncs); i++)
         {
             approachDistance = sDirectionalApproachDistanceFuncs[i](trainerObj, trainerObj->trainerRange_berryTreeId, x, y);
-            if (CheckPathBetweenTrainerAndPlayer(trainerObj, approachDistance, i + 1)) // directions are 1-4 instead of 0-3. south north west east
+            if (CheckPathBetweenTrainerAndPlayer(trainerObj, approachDistance, i + 1))
                 return approachDistance;
         }
     }
-
     return 0;
+}
+
+static u8 GetTrainerApproachDistance(struct ObjectEvent *trainerObj)
+{
+    s16 x, y;
+    u8 approachDistance;
+
+    PlayerGetDestCoords(&x, &y);
+    approachDistance = ApproachDistanceAt(trainerObj, x, y);
+#ifdef PORTABLE
+    {
+        s16 px, py;
+        u8 partnerDistance = 0;
+
+        if (Coop_CopyPartnerTile(&px, &py))
+            partnerDistance = ApproachDistanceAt(trainerObj, px, py);
+        return Coop_ChooseTrainerApproach(approachDistance, partnerDistance);
+    }
+#else
+    return approachDistance;
+#endif
 }
 
 // Returns how far south the player is from trainer. 0 if out of trainer's sight.

@@ -1,4 +1,5 @@
 #include "global.h"
+#include "coop.h"
 #include "battle.h"
 #include "bug_contest.h"
 #include "load_save.h"
@@ -528,6 +529,11 @@ static void DoBattlePikeWildBattle(void)
 
 static void DoTrainerBattle(void)
 {
+#ifdef PORTABLE
+    // Wild battles never reach here. A nearby partner joins as the
+    // second player; the cable link is not used.
+    Coop_PrepareSharedTrainerBattle();
+#endif
     CreateBattleStartTask(GetTrainerBattleTransition(), 0);
     IncrementGameStat(GAME_STAT_TOTAL_BATTLES);
     IncrementGameStat(GAME_STAT_TRAINER_BATTLES);
@@ -536,6 +542,9 @@ static void DoTrainerBattle(void)
 
 static void DoBattlePyramidTrainerHillBattle(void)
 {
+#ifdef PORTABLE
+    Coop_PrepareSharedTrainerBattle();
+#endif
     if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE)
         CreateBattleStartTask(GetSpecialBattleTransition(B_TRANSITION_GROUP_B_PYRAMID), 0);
     else
@@ -1708,6 +1717,10 @@ static void HandleBattleVariantEndParty(void)
 
 static void CB2_EndTrainerBattle(void)
 {
+#ifdef PORTABLE
+    if (!Coop_BattleAbortPending())
+        Coop_RestoreSharedBattleParty(FALSE);
+#endif
     HandleBattleVariantEndParty();
 
     gIsDebugBattle = FALSE;

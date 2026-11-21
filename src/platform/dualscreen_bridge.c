@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "global.h"
+#include "coop.h"
 #include "main.h"
 #include "battle.h"
 #include "battle_main.h"
@@ -712,6 +713,9 @@ int DualScreen_SnapshotToJson(const struct DualScreenSnapshot *snapshot, char *d
     JsonPut(&writer, "{\"v\":1,\"frame\":%u,\"inGame\":%s,\"overworld\":%s,\"ff\":%s",
             (unsigned)snapshot->frame, snapshot->inGame ? "true" : "false", snapshot->overworld ? "true" : "false",
             snapshot->fastForward ? "true" : "false");
+#ifdef PORTABLE
+    JsonPut(&writer, ",\"partner\":%s", Coop_PartnerVisible() ? "true" : "false");
+#endif
     if (snapshot->inGame)
     {
         JsonPut(&writer, ",\"player\":{\"name\":");

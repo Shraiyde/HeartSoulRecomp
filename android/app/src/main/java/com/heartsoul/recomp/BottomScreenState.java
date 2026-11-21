@@ -71,6 +71,8 @@ final class BottomScreenState {
     boolean inGame;
     boolean overworld;
     boolean fastForward;
+    /** The other player is on this map. */
+    boolean partner;
     int frame;
     String playerName = "";
     String mapName = "";
@@ -115,6 +117,7 @@ final class BottomScreenState {
             state.inGame = root.optBoolean("inGame");
             state.overworld = root.optBoolean("overworld");
             state.fastForward = root.optBoolean("ff");
+            state.partner = root.optBoolean("partner");
             state.frame = root.optInt("frame");
 
             JSONObject player = root.optJSONObject("player");
