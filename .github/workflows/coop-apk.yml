@@ -119,10 +119,9 @@ jobs:
           name: Heart & Soul native co-op 1
           files: ${{ runner.temp }}/HeartSoulRecomp-recomp-coop-1.apk
           body: |
-            Native Heart & Soul co-op. One tap on Join PC Host connects both phones
-            to the Windows World Host over ZeroTier. No PIN and no relay.
-            The existing HeartSoulWorldHost zip (world-host-13 or world-host-14)
-            speaks this protocol.
+            Native phone-hosted Heart & Soul co-op. One phone hosts the world;
+            the other joins its ZeroTier IPv6 address over the embedded peer network.
+            No dedicated game server or lobby directory is required.
           draft: false
           prerelease: false
           make_latest: true
