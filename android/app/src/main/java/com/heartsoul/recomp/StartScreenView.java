@@ -303,7 +303,7 @@ final class StartScreenView extends View {
         joinRect.set(joinLeft, top, right, bottom);
         drawActionButton(canvas, left, top, startRight, bottom, "START GAME",
                 row == ROW_START && !joinSelected, pressedRow == ROW_START);
-        drawActionButton(canvas, joinLeft, top, right, bottom, "JOIN PC HOST",
+        drawActionButton(canvas, joinLeft, top, right, bottom, "CO-OP",
                 row == ROW_START && joinSelected, pressedRow == -2);
     }
 
@@ -388,7 +388,7 @@ final class StartScreenView extends View {
                 break;
             default:
                 if (joinSelected) {
-                    first = "One tap joins the PC over ZeroTier. Nothing to type.";
+                    first = "Host a game on this phone or join a friend directly.";
                 } else {
                     first = "Changes apply when the game starts.";
                 }
