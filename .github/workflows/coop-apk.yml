@@ -119,9 +119,11 @@ jobs:
           name: Heart & Soul native co-op 1
           files: ${{ runner.temp }}/HeartSoulRecomp-recomp-coop-1.apk
           body: |
-            Native phone-hosted Heart & Soul co-op. One phone hosts the world;
-            the other joins its ZeroTier IPv6 address over the embedded peer network.
-            No dedicated game server or lobby directory is required.
+            Native phone-hosted Heart & Soul co-op. The host automatically advertises
+            through the existing PokeWilds Mobile lobby directory, and guests browse
+            compatible Heart & Soul hosts. The directory is discovery only; gameplay
+            remains peer-to-peer over embedded ZeroTier. No manual IP entry or
+            dedicated game server is required.
           draft: false
           prerelease: false
           make_latest: true
