@@ -118,6 +118,7 @@ final class StartScreenView extends View {
         gba = GbaText.load(context.getAssets());
         setFocusable(true);
         setFocusableInTouchMode(true);
+        setClickable(true);
     }
 
     // ------------------------------------------------------------------
@@ -549,6 +550,12 @@ final class StartScreenView extends View {
             default:
                 return super.onKeyDown(keyCode, event);
         }
+    }
+
+    @Override
+    public boolean performClick() {
+        super.performClick();
+        return true;
     }
 
     private int rowAt(float x, float y) {
