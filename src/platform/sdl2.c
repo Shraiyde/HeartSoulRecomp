@@ -996,31 +996,62 @@ static void HandleTouchEvent(const SDL_TouchFingerEvent *finger, bool down)
 static void DrawTouchControls(SDL_Renderer *renderer)
 {
     SDL_Rect r;
-    int w = gRenderWidth, h = gRenderHeight;
+    int w = 0, h = 0;
+    int unit, cx, cy, arm, span, button, startW, startH;
+    SDL_GetRendererOutputSize(renderer, &w, &h);
+    if (w <= 0 || h <= 0) {
+        w = gRenderWidth;
+        h = gRenderHeight;
+    }
+    unit = h < w ? h : w;
+    if (unit < 1) return;
+
+    // Draw in physical output pixels, not the 240x160 game framebuffer.
+    // This keeps the controls finger-sized on high-resolution phones.
+    cx = w * 16 / 100;
+    cy = h * 78 / 100;
+    arm = unit * 14 / 100;
+    span = unit * 42 / 100;
+    button = unit * 17 / 100;
+    startW = unit * 13 / 100;
+    startH = unit * 5 / 100;
+
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 18, 24, 36, 145);
-    // D-pad: four separate arms around a clear centre.
-    r = (SDL_Rect){ 22, h - 62, 20, 62 }; SDL_RenderFillRect(renderer, &r);
-    r = (SDL_Rect){ 1, h - 42, 62, 20 }; SDL_RenderFillRect(renderer, &r);
-    // A and B buttons.
-    SDL_SetRenderDrawColor(renderer, 35, 112, 74, 190);
-    r = (SDL_Rect){ w - 48, h - 54, 39, 39 }; SDL_RenderFillRect(renderer, &r);
-    SDL_SetRenderDrawColor(renderer, 142, 58, 52, 190);
-    r = (SDL_Rect){ w - 91, h - 35, 35, 35 }; SDL_RenderFillRect(renderer, &r);
+    SDL_SetRenderDrawColor(renderer, 18, 24, 36, 155);
+    r = (SDL_Rect){ cx - arm / 2, cy - span / 2, arm, span }; SDL_RenderFillRect(renderer, &r);
+    r = (SDL_Rect){ cx - span / 2, cy - arm / 2, span, arm }; SDL_RenderFillRect(renderer, &r);
+
+    // A and B targets align with TouchKeysAt's normalized hit regions.
+    SDL_SetRenderDrawColor(renderer, 35, 112, 74, 205);
+    r = (SDL_Rect){ w * 86 / 100 - button / 2, h * 79 / 100 - button / 2, button, button };
+    SDL_RenderFillRect(renderer, &r);
+    SDL_SetRenderDrawColor(renderer, 142, 58, 52, 205);
+    r = (SDL_Rect){ w * 70 / 100 - button / 2, h * 85 / 100 - button / 2, button, button };
+    SDL_RenderFillRect(renderer, &r);
+
     // Select and Start.
-    SDL_SetRenderDrawColor(renderer, 30, 34, 44, 180);
-    r = (SDL_Rect){ w / 2 - 34, h - 15, 28, 9 }; SDL_RenderFillRect(renderer, &r);
-    r = (SDL_Rect){ w / 2 + 7, h - 15, 28, 9 }; SDL_RenderFillRect(renderer, &r);
-    // Simple white A/B marks keep the face buttons identifiable.
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 230);
-    SDL_RenderDrawLine(renderer, w - 28, h - 47, w - 37, h - 23);
-    SDL_RenderDrawLine(renderer, w - 28, h - 47, w - 19, h - 23);
-    SDL_RenderDrawLine(renderer, w - 33, h - 34, w - 23, h - 34);
-    SDL_RenderDrawLine(renderer, w - 79, h - 29, w - 79, h - 7);
-    SDL_RenderDrawLine(renderer, w - 79, h - 29, w - 68, h - 25);
-    SDL_RenderDrawLine(renderer, w - 68, h - 25, w - 79, h - 18);
-    SDL_RenderDrawLine(renderer, w - 79, h - 18, w - 68, h - 13);
-    SDL_RenderDrawLine(renderer, w - 68, h - 13, w - 79, h - 7);
+    SDL_SetRenderDrawColor(renderer, 30, 34, 44, 195);
+    r = (SDL_Rect){ w * 44 / 100 - startW / 2, h * 91 / 100 - startH / 2, startW, startH };
+    SDL_RenderFillRect(renderer, &r);
+    r = (SDL_Rect){ w * 56 / 100 - startW / 2, h * 91 / 100 - startH / 2, startW, startH };
+    SDL_RenderFillRect(renderer, &r);
+
+    // Contrasting marks identify A and B at a glance.
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 240);
+    SDL_RenderDrawLine(renderer, w * 86 / 100 - button / 5, h * 79 / 100 - button / 4,
+                       w * 86 / 100 + button / 5, h * 79 / 100 + button / 4);
+    SDL_RenderDrawLine(renderer, w * 86 / 100 + button / 5, h * 79 / 100 - button / 4,
+                       w * 86 / 100 - button / 5, h * 79 / 100 + button / 4);
+    SDL_RenderDrawLine(renderer, w * 70 / 100, h * 85 / 100 - button / 4,
+                       w * 70 / 100, h * 85 / 100 + button / 4);
+    SDL_RenderDrawLine(renderer, w * 70 / 100, h * 85 / 100 - button / 4,
+                       w * 70 / 100 + button / 4, h * 85 / 100 - button / 8);
+    SDL_RenderDrawLine(renderer, w * 70 / 100 + button / 4, h * 85 / 100 - button / 8,
+                       w * 70 / 100, h * 85 / 100);
+    SDL_RenderDrawLine(renderer, w * 70 / 100, h * 85 / 100,
+                       w * 70 / 100 + button / 4, h * 85 / 100 + button / 8);
+    SDL_RenderDrawLine(renderer, w * 70 / 100 + button / 4, h * 85 / 100 + button / 8,
+                       w * 70 / 100, h * 85 / 100 + button / 4);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 #endif
