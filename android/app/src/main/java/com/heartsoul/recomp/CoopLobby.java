@@ -132,7 +132,7 @@ final class CoopLobby {
             if (entries == null) throw new IllegalArgumentException("Missing lobby list");
             for (int i = 0; i < entries.length(); i++) {
                 JSONObject entry = entries.optJSONObject(i);
-                if (entry == null || !"game".equals(entry.optString("kind", "game"))) continue;
+                if (entry == null || !"game".equals(entry.optString("kind", "game"))\n                        || !"heartsoul-direct-v1".equals(entry.optString("protocol", ""))) continue;
                 String address = entry.optString("address", "").trim();
                 if (!address.matches("[0-9A-Fa-f:]+") || !address.contains(":")) continue;
                 int port = entry.optInt("port", CoopNetwork.PORT);
