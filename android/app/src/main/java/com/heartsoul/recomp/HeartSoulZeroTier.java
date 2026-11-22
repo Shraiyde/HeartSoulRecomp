@@ -519,7 +519,7 @@ public final class HeartSoulZeroTier {
         final String key = lobbyKey;
         HTTP.execute(new Runnable() {
             @Override public void run() {
-                String result = "0\\n";
+                String result = "0\n";
                 HttpURLConnection connection = null;
                 try {
                     connection = (HttpURLConnection) new URL(address).openConnection();
@@ -544,7 +544,7 @@ public final class HeartSoulZeroTier {
                         while ((count = stream.read(buffer)) > 0 && text.size() < 262144) text.write(buffer, 0, count);
                         stream.close();
                     }
-                    result = code + "\\n" + new String(text.toByteArray(), StandardCharsets.UTF_8);
+                    result = code + "\n" + new String(text.toByteArray(), StandardCharsets.UTF_8);
                 } catch (Exception error) {
                     Log.w(TAG, "lobby directory request failed: " + error);
                 } finally {
@@ -557,7 +557,7 @@ public final class HeartSoulZeroTier {
         return id;
     }
 
-    /** Empty while pending, else "status\\nbody" once; status 0 means it failed. */
+    /** Empty while pending, else "status\nbody" once; status 0 means it failed. */
     public static String httpTake(int id) {
         String result = httpResults.remove(id);
         return result == null ? "" : result;
