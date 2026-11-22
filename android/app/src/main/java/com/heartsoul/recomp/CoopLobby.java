@@ -1,5 +1,7 @@
 package com.heartsoul.recomp;
 
+/* Lobby-directory flow adapted from PokeWilds Mobile (GPL-3.0). */
+
 import android.content.Context;
 import android.os.Build;
 import android.util.Log;
