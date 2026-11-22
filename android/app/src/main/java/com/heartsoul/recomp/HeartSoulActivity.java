@@ -1,6 +1,7 @@
 package com.heartsoul.recomp;
 
 import android.app.ActivityOptions;
+import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Point;
@@ -9,6 +10,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Display;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.FrameLayout;
 
 import org.libsdl.app.SDLActivity;
 
@@ -35,6 +40,8 @@ public class HeartSoulActivity extends SDLActivity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private BottomScreenPresentation presentation;
+    private BottomScreenView singleScreenView;
+    private Dialog singleScreenDialog;
     private Object lastSink;
     private String lastJson;
     private boolean bridgeBroken;
@@ -86,7 +93,7 @@ public class HeartSoulActivity extends SDLActivity {
                     handler.postDelayed(reclaimFocusLater, delay);
                 }
             }
-            Object sink = presentation != null ? presentation : activity;
+            Object sink = presentation != null ? presentation : activity != null ? activity : singleScreenView;
             if (sink != lastSink) {
                 lastSink = sink;
                 lastJson = null;
@@ -102,8 +109,10 @@ public class HeartSoulActivity extends SDLActivity {
                         BottomScreenState state = BottomScreenState.parse(json);
                         if (presentation != null) {
                             presentation.setState(state);
-                        } else {
+                        } else if (activity != null) {
                             activity.setState(state);
+                        } else if (singleScreenView != null) {
+                            singleScreenView.setState(state);
                         }
                     }
                 } catch (UnsatisfiedLinkError e) {
@@ -160,6 +169,55 @@ public class HeartSoulActivity extends SDLActivity {
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);
+        installSingleScreenAccess();
+    }
+
+    private void installSingleScreenAccess() {
+        Display second = SecondScreen.find(this, getWindowManager().getDefaultDisplay().getDisplayId());
+        if (second != null || !bottomScreenEnabled) return;
+        FrameLayout root = findViewById(android.R.id.content);
+        if (root == null) return;
+        Button open = new Button(this);
+        open.setText("BOTTOM SCREEN");
+        open.setTextSize(10);
+        open.setAlpha(0.82f);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.RIGHT);
+        params.topMargin = 8;
+        params.rightMargin = 8;
+        root.addView(open, params);
+        open.setOnClickListener(v -> showSingleScreen());
+    }
+
+    private void showSingleScreen() {
+        if (singleScreenDialog != null && singleScreenDialog.isShowing()) return;
+        Dialog dialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        FrameLayout layout = new FrameLayout(this);
+        singleScreenView = new BottomScreenView(this);
+        layout.addView(singleScreenView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        Button close = new Button(this);
+        close.setText("RETURN TO GAME");
+        close.setTextSize(10);
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.RIGHT);
+        layout.addView(close, closeParams);
+        close.setOnClickListener(v -> dialog.dismiss());
+        dialog.setContentView(layout);
+        dialog.setOnDismissListener(v -> {
+            singleScreenView = null;
+            singleScreenDialog = null;
+            lastSink = null;
+            lastJson = null;
+        });
+        singleScreenDialog = dialog;
+        dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+        }
     }
 
     @Override
@@ -188,6 +246,7 @@ public class HeartSoulActivity extends SDLActivity {
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
         dismissPresentation();
+        if (singleScreenDialog != null) singleScreenDialog.dismiss();
         super.onPause();
     }
 
@@ -206,6 +265,7 @@ public class HeartSoulActivity extends SDLActivity {
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
         dismissPresentation();
+        if (singleScreenDialog != null) singleScreenDialog.dismiss();
         BottomScreenActivity.finishCurrent();
         running = false;
         super.onDestroy();
