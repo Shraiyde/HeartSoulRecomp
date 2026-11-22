@@ -1117,22 +1117,6 @@ static void DrawTouchControls(SDL_Renderer *renderer)
     r = (SDL_Rect){ w * 56 / 100 - startW / 2, h * 91 / 100 - startH / 2, startW, startH };
     SDL_RenderFillRect(renderer, &r);
 
-    // Contrasting marks identify A and B at a glance.
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 240);
-    SDL_RenderDrawLine(renderer, w * 86 / 100 - button / 5, h * 79 / 100 - button / 4,
-                       w * 86 / 100 + button / 5, h * 79 / 100 + button / 4);
-    SDL_RenderDrawLine(renderer, w * 86 / 100 + button / 5, h * 79 / 100 - button / 4,
-                       w * 86 / 100 - button / 5, h * 79 / 100 + button / 4);
-    SDL_RenderDrawLine(renderer, w * 70 / 100, h * 85 / 100 - button / 4,
-                       w * 70 / 100, h * 85 / 100 + button / 4);
-    SDL_RenderDrawLine(renderer, w * 70 / 100, h * 85 / 100 - button / 4,
-                       w * 70 / 100 + button / 4, h * 85 / 100 - button / 8);
-    SDL_RenderDrawLine(renderer, w * 70 / 100 + button / 4, h * 85 / 100 - button / 8,
-                       w * 70 / 100, h * 85 / 100);
-    SDL_RenderDrawLine(renderer, w * 70 / 100, h * 85 / 100,
-                       w * 70 / 100 + button / 4, h * 85 / 100 + button / 8);
-    SDL_RenderDrawLine(renderer, w * 70 / 100 + button / 4, h * 85 / 100 + button / 8,
-                       w * 70 / 100, h * 85 / 100 + button / 4);
     // Explicit labels make the on-screen controls identifiable at phone size.
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     DrawTouchText(renderer, "A", w * 86 / 100, h * 79 / 100, 2);
