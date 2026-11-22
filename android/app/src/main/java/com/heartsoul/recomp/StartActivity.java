@@ -8,6 +8,8 @@ import android.content.pm.PackageManager;
 import android.graphics.Point;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Display;
 import android.text.InputType;
 import android.widget.EditText;
@@ -60,49 +62,77 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
     }
 
     private void startHosting() {
-        android.app.ProgressDialog progress = android.app.ProgressDialog.show(this, "CO-OP",
-                "Checking the router and preparing a direct connection...", true, false);
-        new Thread(() -> {
-            CoopNetwork.HostInfo info = CoopNetwork.prepareHost(this, CoopNetwork.PORT);
-            runOnUiThread(() -> {
-                progress.dismiss();
-                StringBuilder message = new StringBuilder();
-                if (!info.joinCode.isEmpty()) message.append("JOIN CODE: ").append(info.joinCode).append("\n\n");
-                if (!info.publicAddress.isEmpty())
-                    message.append("INTERNET: ").append(info.publicAddress).append(":").append(CoopNetwork.PORT).append("\n");
-                if (!info.localAddress.isEmpty())
-                    message.append("SAME WI-FI: ").append(info.localAddress).append(":").append(CoopNetwork.PORT).append("\n");
-                message.append("\n");
-                if (info.mapped) message.append("Router port opened automatically with UPnP.");
-                else message.append("Automatic port mapping was unavailable. For internet play, forward TCP ")
-                        .append(CoopNetwork.PORT).append(" to this phone on your router.");
-                new AlertDialog.Builder(this).setTitle("HOST CODE")
-                        .setMessage(message.toString())
-                        .setPositiveButton("START HOSTING", (d, w) -> launchGame("host", "", CoopNetwork.PORT))
-                        .setNegativeButton("CANCEL", null).show();
-            });
-        }).start();
+        startZeroTier(true, "");
     }
 
     private void joinGame() {
         EditText address = new EditText(this);
         address.setSingleLine(true);
-        address.setHint("8-character code or IP:PORT");
-        address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-                | InputType.TYPE_TEXT_VARIATION_URI);
+        address.setHint("Host's ZeroTier IPv6 address");
+        address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         new AlertDialog.Builder(this).setTitle("JOIN A GAME")
-                .setMessage("Enter the host's join code or direct IPv4 address.")
+                .setMessage("Enter the IPv6 address shown on the host phone.")
                 .setView(address)
-                .setPositiveButton("JOIN", (dialog, which) -> {
-                    String[] target = CoopNetwork.parseAddress(address.getText().toString());
-                    if (target == null) {
-                        new AlertDialog.Builder(this).setMessage("That join code or address is invalid.")
+                .setPositiveButton("CONNECT", (dialog, which) -> {
+                    String remote = address.getText().toString().trim();
+                    if (!remote.matches("[0-9A-Fa-f:]+") || !remote.contains(":")) {
+                        new AlertDialog.Builder(this).setMessage("Enter the host's full ZeroTier IPv6 address.")
                                 .setPositiveButton("OK", null).show();
                         return;
                     }
-                    launchGame("join", target[0], Integer.parseInt(target[1]));
+                    startZeroTier(false, remote);
                 })
                 .setNegativeButton("CANCEL", null).show();
+    }
+
+    private void startZeroTier(boolean host, String remoteAddress) {
+        if (!CoopNetwork.available()) {
+            new AlertDialog.Builder(this).setTitle("CO-OP UNAVAILABLE")
+                    .setMessage("This APK is missing the embedded ZeroTier library. Rebuild it with libzt enabled.")
+                    .setPositiveButton("OK", null).show();
+            return;
+        }
+        android.app.ProgressDialog progress = android.app.ProgressDialog.show(this, "CO-OP",
+                "Connecting to the peer network...", true, false);
+        String error = CoopNetwork.start(this);
+        if (error != null && !error.isEmpty()) {
+            progress.dismiss();
+            new AlertDialog.Builder(this).setTitle("CO-OP ERROR").setMessage(error)
+                    .setPositiveButton("OK", null).show();
+            return;
+        }
+        Handler handler = new Handler(Looper.getMainLooper());
+        int[] attempts = { 0 };
+        Runnable poll = new Runnable() {
+            @Override public void run() {
+                CoopNetwork.Status status = CoopNetwork.status();
+                if (status.ready()) {
+                    progress.dismiss();
+                    if (host) {
+                        String message = "HOST ADDRESS:\\n" + status.address
+                                + "\\n\\nShare this IPv6 address with the other player. "
+                                + "They enter it under JOIN A GAME. This phone will host the world and play.";
+                        new AlertDialog.Builder(StartActivity.this).setTitle("READY TO HOST")
+                                .setMessage(message)
+                                .setPositiveButton("START HOSTING",
+                                        (dialog, which) -> launchGame("host", "", CoopNetwork.PORT))
+                                .setNegativeButton("CANCEL", null).show();
+                    } else {
+                        launchGame("join", remoteAddress, CoopNetwork.PORT);
+                    }
+                    return;
+                }
+                if (status.failed() || ++attempts[0] >= 360) {
+                    progress.dismiss();
+                    String reason = status.message.isEmpty() ? "The peer network did not become ready." : status.message;
+                    new AlertDialog.Builder(StartActivity.this).setTitle("CO-OP CONNECTION FAILED")
+                            .setMessage(reason).setPositiveButton("OK", null).show();
+                    return;
+                }
+                handler.postDelayed(this, 250);
+            }
+        };
+        handler.postDelayed(poll, 250);
     }
 
     private void launchGame(boolean joinPcHost) {
