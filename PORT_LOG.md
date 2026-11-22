@@ -13,6 +13,46 @@ Rules for this log:
 
 ---
 
+## 2026-11-22, direct phone-hosted co-op transport
+
+State at end of session: implementation is on branch `coop/direct-phone-host`.
+It has **not** been compiled or tested on Android devices yet. Do not call it
+working until the Android build and two-phone connection have both passed.
+
+### Done
+
+- Replaced the baked PC World Host endpoint with a phone-hosted TCP listener
+  on port 54555. The hosting phone is role 0 and plays the world; the joining
+  phone is role 1 and connects directly to its IPv4 address.
+- Both phones now send and receive the same length-prefixed AES-256-GCM frame
+  format. Existing shared-world flags, variables, positions, lead Pokémon,
+  readiness sync, and battle-abort logic remain in `src/coop.c`.
+- Added an Android CO-OP entry with HOST A GAME / JOIN A GAME, direct IPv4
+  addresses and PokeWilds-compatible eight-character IPv4 join codes.
+- Added UPnP TCP port mapping discovery and external IPv4 lookup. If UPnP is
+  unavailable, the host screen instructs the player to forward TCP 54555.
+- Removed the hard-coded ZeroTier World Host address and port from the
+  co-op secret header. No dedicated server or relay is introduced.
+
+### Not yet verified
+
+- Android NDK/Gradle compilation.
+- UPnP behavior across real routers.
+- Two-phone LAN and remote internet sessions, disconnect/reconnect, and
+  shared trainer battles.
+- Direct internet play cannot cross carrier-grade NAT or restrictive
+  firewalls without a reachable public endpoint and router mapping.
+
+### Next
+
+1. Run the Android CI build for both ABIs and fix compile errors.
+2. Test two phones on the same Wi-Fi.
+3. Test remote hosting with UPnP and verify the join code resolves to the public IPv4.
+4. Test manual port forwarding and disconnect/reconnect.
+5. Only then mark co-op as working or publish an APK.
+
+---
+
 ## 2026-11-21, co-op coverage and APK compile
 
 State at end of session: still not played on a phone or emulator. Compared
