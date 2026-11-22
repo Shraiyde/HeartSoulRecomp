@@ -36,8 +36,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * carries those bytes across the ZeroTier network through loopback:
  *   host:  ZeroTier listener  -> 127.0.0.1:<game port>
  *   guest: 127.0.0.1:<random> -> ZeroTier connection to the host
- * The host address is shared directly between the two players; no lobby
- * directory or game server is involved.
+ * The host automatically publishes its ZeroTier IPv6 address through the
+ * existing PokeWilds Mobile lobby directory. Guests browse compatible Heart &
+ * Soul hosts there. The directory is discovery only; gameplay remains
+ * peer-to-peer over ZeroTier.
  *
  * Every method is static and uses only String/int/boolean so GDScript can call
  * it through JavaClassWrapper, like PokeWildsStorage.
