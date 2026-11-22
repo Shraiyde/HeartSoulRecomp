@@ -25,6 +25,7 @@ final class CoopNetwork {
     static final int PORT = 54555;
     private static final String ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final long INTERNET_TAG = 0x100000000L;
+    private static String upnpServiceType = "urn:schemas-upnp-org:service:WANIPConnection:1";
 
     static final class HostInfo {
         final String localAddress;
@@ -105,9 +106,9 @@ final class CoopNetwork {
                 + "<NewProtocol>TCP</NewProtocol><NewInternalPort>" + port + "</NewInternalPort>"
                 + "<NewInternalClient>" + local + "</NewInternalClient><NewEnabled>1</NewEnabled>"
                 + "<NewPortMappingDescription>HeartSoul Co-op</NewPortMappingDescription>"
-                + "<NewLeaseDuration>0</NewLeaseDuration></u:AddPortMapping>"
+                + "<NewLeaseDuration>3600</NewLeaseDuration></u:AddPortMapping>"
                 + "</s:Body></s:Envelope>";
-        return soap(control, "urn:schemas-upnp-org:service:WANIPConnection:1#AddPortMapping", body) != null;
+        return soap(control, upnpServiceType + "#AddPortMapping", body) != null;
     }
 
     private static String upnpExternalAddress(Context context) throws Exception {
@@ -118,7 +119,7 @@ final class CoopNetwork {
                 + "<u:GetExternalIPAddress xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\"/>"
                 + "</s:Body></s:Envelope>";
         byte[] response = soap(control,
-                "urn:schemas-upnp-org:service:WANIPConnection:1#GetExternalIPAddress", body);
+                upnpServiceType + "#GetExternalIPAddress", body);
         if (response == null) return "";
         Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder()
                 .parse(new java.io.ByteArrayInputStream(response));
@@ -174,7 +175,10 @@ final class CoopNetwork {
                 String type = childText(service, "serviceType");
                 if (type.contains("WANIPConnection") || type.contains("WANPPPConnection")) {
                     String path = childText(service, "controlURL");
-                    return path.isEmpty() ? "" : new URL(new URL(location), path).toString();
+                    if (!path.isEmpty()) {
+                        upnpServiceType = type;
+                        return new URL(new URL(location), path).toString();
+                    }
                 }
             }
             return "";
