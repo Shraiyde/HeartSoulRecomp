@@ -24,10 +24,15 @@ if (!portVersionMatch.find()) {
 }
 def portVersionName = portVersionMatch.group(1)
 
+dependencies {
+    // Built by port/build-libzt-android.sh; embedded ZeroTier carries only peer game traffic.
+    implementation fileTree(dir: 'libs/zerotier', include: ['*.aar'])
+}
+
 android {
     namespace 'com.heartsoul.recomp'
     compileSdk 34
-    ndkVersion '27.2.12479018'
+    ndkVersion '29.0.14206865'
 
     defaultConfig {
         applicationId 'com.heartsoul.recomp'
