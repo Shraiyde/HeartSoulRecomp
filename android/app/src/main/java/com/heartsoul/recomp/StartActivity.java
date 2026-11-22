@@ -109,8 +109,8 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
                 if (status.ready()) {
                     progress.dismiss();
                     if (host) {
-                        String message = "HOST ADDRESS:\\n" + status.address
-                                + "\\n\\nShare this IPv6 address with the other player. "
+                        String message = "HOST ADDRESS:\n" + status.address
+                                + "\n\nShare this IPv6 address with the other player. "
                                 + "They enter it under JOIN A GAME. This phone will host the world and play.";
                         new AlertDialog.Builder(StartActivity.this).setTitle("READY TO HOST")
                                 .setMessage(message)
