@@ -589,6 +589,21 @@ static bool VerifyHello(const char *line)
 
 /* Both devices run the same encrypted, framed peer protocol. The phone that
  * opened the listening socket is role 0; the joining phone is role 1. */
+static uint64_t RandomCounter(void)
+{
+    uint64_t value = 0;
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f != NULL)
+    {
+        if (fread(&value, 1, sizeof(value), f) != sizeof(value))
+            value = 0;
+        fclose(f);
+    }
+    if (value == 0)
+        value = (CoopNowMs() << 16) ^ (uint64_t)getpid();
+    return value | 1ull;
+}
+
 static void RunSession(int fd, int localRole, bool isHost)
 {
     char line[160];
@@ -637,7 +652,7 @@ static void RunSession(int fd, int localRole, bool isHost)
     sRole = localRole;
     sLinkUp = true;
     sEverUp = true;
-    sSendCounter = 1;
+    sSendCounter = RandomCounter();
     sRecvCounter = 0;
     pthread_mutex_unlock(&sMu);
     fprintf(stderr, "co-op: direct phone link up (role %d)\n", localRole);
