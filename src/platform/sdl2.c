@@ -946,7 +946,7 @@ static u16 TouchKeysAt(float x, float y)
         if (dy >  0.055f) result |= DPAD_DOWN;
     }
     if (x > 0.62f && y > 0.48f) {
-        float ax = x - 0.86f, ay = y - 0.72f;
+        float ax = x - 0.86f, ay = y - 0.79f;
         float bx = x - 0.70f, by = y - 0.85f;
         if (ax * ax + ay * ay < 0.018f) result |= A_BUTTON;
         if (bx * bx + by * by < 0.018f) result |= B_BUTTON;
@@ -1010,6 +1010,16 @@ static void DrawTouchControls(SDL_Renderer *renderer)
     SDL_SetRenderDrawColor(renderer, 30, 34, 44, 180);
     r = (SDL_Rect){ w / 2 - 34, h - 15, 28, 9 }; SDL_RenderFillRect(renderer, &r);
     r = (SDL_Rect){ w / 2 + 7, h - 15, 28, 9 }; SDL_RenderFillRect(renderer, &r);
+    // Simple white A/B marks keep the face buttons identifiable.
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 230);
+    SDL_RenderDrawLine(renderer, w - 28, h - 47, w - 37, h - 23);
+    SDL_RenderDrawLine(renderer, w - 28, h - 47, w - 19, h - 23);
+    SDL_RenderDrawLine(renderer, w - 33, h - 34, w - 23, h - 34);
+    SDL_RenderDrawLine(renderer, w - 79, h - 29, w - 79, h - 7);
+    SDL_RenderDrawLine(renderer, w - 79, h - 29, w - 68, h - 25);
+    SDL_RenderDrawLine(renderer, w - 68, h - 25, w - 79, h - 18);
+    SDL_RenderDrawLine(renderer, w - 79, h - 18, w - 68, h - 13);
+    SDL_RenderDrawLine(renderer, w - 68, h - 13, w - 79, h - 7);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
