@@ -154,7 +154,7 @@ final class CoopLobby {
     }
 
     static void startHosting(Context context) {
-        stopHosting();
+        stopHosting(context);
         final String[] config = access(context);
         if (config[0].isEmpty()) {
             Log.e(TAG, "Cannot announce host: lobby directory configuration is missing");
@@ -201,7 +201,7 @@ final class CoopLobby {
         announcer.start();
     }
 
-    static void stopHosting() {
+    static void stopHosting(Context context) {
         announcing.set(false);
         Thread thread = announcer;
         if (thread != null) thread.interrupt();
@@ -209,10 +209,16 @@ final class CoopLobby {
         String key = hostKey;
         hostKey = "";
         if (!key.isEmpty()) {
-            // Best effort removal. Expiry also removes a host that disappears.
-            // The HTTP request does not carry gameplay traffic.
-            // Configuration is read by the next start/fetch; the key is already
-            // the same directory key used by the active announcement.
+            String[] config = access(context);
+            if (!config[0].isEmpty()) {
+                HeartSoulZeroTier.setLobbyKey(config[1]);
+                try {
+                    JSONObject remove = new JSONObject();
+                    remove.put("key", key);
+                    remove.put("remove", true);
+                    HeartSoulZeroTier.httpStart(config[0] + "/v1/lobbies", remove.toString());
+                } catch (Exception ignored) {}
+            }
         }
     }
 
