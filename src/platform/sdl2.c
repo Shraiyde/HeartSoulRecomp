@@ -1016,6 +1016,58 @@ static void HandleTouchEvent(const SDL_TouchFingerEvent *finger, bool down)
 }
 
 #ifdef __ANDROID__
+static Uint8 TouchGlyphRow(char ch, int row)
+{
+    static const Uint8 a[5] = { 0x2, 0x5, 0x7, 0x5, 0x5 };
+    static const Uint8 b[5] = { 0x6, 0x5, 0x6, 0x5, 0x6 };
+    static const Uint8 e[5] = { 0x7, 0x4, 0x6, 0x4, 0x7 };
+    static const Uint8 l[5] = { 0x4, 0x4, 0x4, 0x4, 0x7 };
+    static const Uint8 r[5] = { 0x6, 0x5, 0x6, 0x5, 0x5 };
+    static const Uint8 s[5] = { 0x3, 0x4, 0x2, 0x1, 0x6 };
+    static const Uint8 t[5] = { 0x7, 0x2, 0x2, 0x2, 0x2 };
+    switch (ch)
+    {
+    case 'A': return a[row];
+    case 'B': return b[row];
+    case 'E': return e[row];
+    case 'L': return l[row];
+    case 'R': return r[row];
+    case 'S': return s[row];
+    case 'T': return t[row];
+    default: return 0;
+    }
+}
+
+static void DrawTouchText(SDL_Renderer *renderer, const char *text, int centerX, int centerY, int pixel)
+{
+    SDL_Rect dot;
+    int length = (int)strlen(text);
+    int width, x, y, i, row, col;
+    if (length <= 0) return;
+    if (pixel < 1) pixel = 1;
+    width = (length * 4 - 1) * pixel;
+    x = centerX - width / 2;
+    y = centerY - (5 * pixel) / 2;
+    dot.w = pixel;
+    dot.h = pixel;
+    for (i = 0; i < length; i++)
+    {
+        for (row = 0; row < 5; row++)
+        {
+            Uint8 bits = TouchGlyphRow(text[i], row);
+            for (col = 0; col < 3; col++)
+            {
+                if (bits & (1 << (2 - col)))
+                {
+                    dot.x = x + i * 4 * pixel + col * pixel;
+                    dot.y = y + row * pixel;
+                    SDL_RenderFillRect(renderer, &dot);
+                }
+            }
+        }
+    }
+}
+
 static void DrawTouchControls(SDL_Renderer *renderer)
 {
     SDL_Rect r;
@@ -1046,20 +1098,20 @@ static void DrawTouchControls(SDL_Renderer *renderer)
     startH = unit * 5 / 100;
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 18, 24, 36, 155);
+    SDL_SetRenderDrawColor(renderer, 18, 24, 36, 185);
     r = (SDL_Rect){ cx - arm / 2, cy - span / 2, arm, span }; SDL_RenderFillRect(renderer, &r);
     r = (SDL_Rect){ cx - span / 2, cy - arm / 2, span, arm }; SDL_RenderFillRect(renderer, &r);
 
     // A and B targets align with TouchKeysAt's normalized hit regions.
-    SDL_SetRenderDrawColor(renderer, 35, 112, 74, 205);
+    SDL_SetRenderDrawColor(renderer, 35, 112, 74, 225);
     r = (SDL_Rect){ w * 86 / 100 - button / 2, h * 79 / 100 - button / 2, button, button };
     SDL_RenderFillRect(renderer, &r);
-    SDL_SetRenderDrawColor(renderer, 142, 58, 52, 205);
+    SDL_SetRenderDrawColor(renderer, 142, 58, 52, 225);
     r = (SDL_Rect){ w * 70 / 100 - button / 2, h * 85 / 100 - button / 2, button, button };
     SDL_RenderFillRect(renderer, &r);
 
     // Select and Start.
-    SDL_SetRenderDrawColor(renderer, 30, 34, 44, 195);
+    SDL_SetRenderDrawColor(renderer, 30, 34, 44, 225);
     r = (SDL_Rect){ w * 44 / 100 - startW / 2, h * 91 / 100 - startH / 2, startW, startH };
     SDL_RenderFillRect(renderer, &r);
     r = (SDL_Rect){ w * 56 / 100 - startW / 2, h * 91 / 100 - startH / 2, startW, startH };
@@ -1081,6 +1133,12 @@ static void DrawTouchControls(SDL_Renderer *renderer)
                        w * 70 / 100 + button / 4, h * 85 / 100 + button / 8);
     SDL_RenderDrawLine(renderer, w * 70 / 100 + button / 4, h * 85 / 100 + button / 8,
                        w * 70 / 100, h * 85 / 100 + button / 4);
+    // Explicit labels make the on-screen controls identifiable at phone size.
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    DrawTouchText(renderer, "A", w * 86 / 100, h * 79 / 100, 2);
+    DrawTouchText(renderer, "B", w * 70 / 100, h * 85 / 100, 2);
+    DrawTouchText(renderer, "SEL", w * 44 / 100, h * 91 / 100, 1);
+    DrawTouchText(renderer, "START", w * 56 / 100, h * 91 / 100, 1);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 #endif
