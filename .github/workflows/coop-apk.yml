@@ -56,7 +56,18 @@ jobs:
           "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" --install \
             "platforms;android-34" \
             "build-tools;34.0.0" \
-            "ndk;27.2.12479018"
+            "ndk;29.0.14206865" \
+            "cmake;3.22.1"
+
+      - name: Build embedded ZeroTier
+        run: |
+          set -euo pipefail
+          git clone --recursive --depth 1 https://github.com/zerotier/libzt "$RUNNER_TEMP/libzt"
+          chmod +x port/build-libzt-android.sh
+          LIBZT_SRC="$RUNNER_TEMP/libzt" \
+          LIBZT_WORK="$RUNNER_TEMP/libzt-work" \
+          NDK_VERSION=29.0.14206865 CMAKE_VERSION=3.22.1 \
+            port/build-libzt-android.sh
 
       - name: Build image
         run: docker build -t hns-port port/docker
