@@ -998,7 +998,13 @@ static void DrawTouchControls(SDL_Renderer *renderer)
     SDL_Rect r;
     int w = 0, h = 0;
     int unit, cx, cy, arm, span, button, startW, startH;
-    SDL_GetRendererOutputSize(renderer, &w, &h);
+    // SDL's logical size is normally the GBA-sized frame. Renderer drawing
+    // coordinates are transformed from that space to the physical display.
+    // Use logical dimensions when present so the controls remain visible and
+    // scale with the game image; use output pixels only in stretch mode.
+    SDL_RenderGetLogicalSize(renderer, &w, &h);
+    if (w <= 0 || h <= 0)
+        SDL_GetRendererOutputSize(renderer, &w, &h);
     if (w <= 0 || h <= 0) {
         w = gRenderWidth;
         h = gRenderHeight;
