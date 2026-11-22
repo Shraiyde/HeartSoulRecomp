@@ -67,12 +67,12 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
             runOnUiThread(() -> {
                 progress.dismiss();
                 StringBuilder message = new StringBuilder();
-                if (!info.joinCode.isEmpty()) message.append("JOIN CODE: ").append(info.joinCode).append("\\n\\n");
+                if (!info.joinCode.isEmpty()) message.append("JOIN CODE: ").append(info.joinCode).append("\n\n");
                 if (!info.publicAddress.isEmpty())
-                    message.append("INTERNET: ").append(info.publicAddress).append(":").append(CoopNetwork.PORT).append("\\n");
+                    message.append("INTERNET: ").append(info.publicAddress).append(":").append(CoopNetwork.PORT).append("\n");
                 if (!info.localAddress.isEmpty())
-                    message.append("SAME WI-FI: ").append(info.localAddress).append(":").append(CoopNetwork.PORT).append("\\n");
-                message.append("\\n");
+                    message.append("SAME WI-FI: ").append(info.localAddress).append(":").append(CoopNetwork.PORT).append("\n");
+                message.append("\n");
                 if (info.mapped) message.append("Router port opened automatically with UPnP.");
                 else message.append("Automatic port mapping was unavailable. For internet play, forward TCP ")
                         .append(CoopNetwork.PORT).append(" to this phone on your router.");
