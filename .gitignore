@@ -86,3 +86,7 @@ android/local.properties
 /build/android/
 android/keystore/
 android/keystore.properties
+
+# Generated embedded ZeroTier Android AAR and external libzt checkout.
+android/app/libs/zerotier/
+third_party/libzt/
