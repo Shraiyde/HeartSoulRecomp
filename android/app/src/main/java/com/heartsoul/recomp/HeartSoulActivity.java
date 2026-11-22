@@ -149,6 +149,7 @@ public class HeartSoulActivity extends SDLActivity {
         }
         if (coopHosting) {
             if (!CoopNetwork.hostOpen()) Log.e(TAG, "could not open the ZeroTier host listener");
+            CoopLobby.startHosting(this);
         } else if ("join".equals(coopMode)) {
             coopJoining = true;
             int localPort = CoopNetwork.joinOpen(coopAddress);
@@ -261,6 +262,7 @@ public class HeartSoulActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (coopHosting) CoopLobby.stopHosting();
         if (coopHosting || coopJoining) CoopNetwork.close();
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
