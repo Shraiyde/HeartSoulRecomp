@@ -499,7 +499,8 @@ static int TcpListen(int port)
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    /* The embedded ZeroTier bridge forwards peers into this loopback socket. */
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons((uint16_t)port);
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 || listen(fd, 1) < 0)
     {
