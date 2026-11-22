@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds libzt (the embeddable ZeroTier node) for Android and puts the AAR
 # where the game's Gradle export picks it up:
-#   project/android/build/libs/zerotier/libzt-release.aar
+#   android/app/libs/zerotier/libzt-release.aar
 #
 # Needs: JDK 17, Android SDK with the NDK and CMake packages below, and the
 # libzt source with its submodules (git clone --recursive
