@@ -30,6 +30,10 @@ Requirements: Android 8 or newer on an ARM device. The APK contains both a 64-bi
 - **Fast forward.** The right trigger (R2) fast-forwards. On the start screen pick HOLD (while held), TOGGLE (one pull on, the next off) or SMART (toggle, but menus run at normal speed so the cursor does not race).
 - **Controller support.** Built-in controls and gamepads work. The button labelled A is A.
 
+## Two-player co-op
+
+Choose **CO-OP** on the start screen, then host a game or join a friend's game. The host's phone runs the world and remains a player; the other phone connects directly to it over TCP. The host shares an eight-character join code or an IPv4 address. The app tries to open TCP port 54555 on the router with UPnP. If the router does not support UPnP, forward TCP port 54555 to the hosting phone manually. Both phones must be able to reach the host address. This is direct host/client networking: there is no dedicated game server, lobby service, or relay. Carrier-grade NAT or restrictive mobile networks can prevent direct internet connections.
+
 ## The bottom screen
 
 A status line (name, place, money, badges, play time, fast forward) and seven tabs:
