@@ -184,6 +184,11 @@ void AgbMain(void)
 #endif
 #endif
     gAgbMainLoop_sp = __builtin_frame_address(0);
+#ifdef PORTABLE
+    // Start the direct peer transport only after the native game state and
+    // heap are initialized. The transport owns its own worker thread.
+    Coop_Boot();
+#endif
     AgbMainLoop();
 }
 
