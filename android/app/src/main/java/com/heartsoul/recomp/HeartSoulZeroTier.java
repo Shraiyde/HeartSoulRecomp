@@ -1,5 +1,7 @@
 package com.heartsoul.recomp;
 
+/* Adapted from PokeWilds Mobile's embedded ZeroTier bridge (GPL-3.0). */
+
 import android.util.Log;
 
 import com.zerotier.sockets.ZeroTierEventListener;
