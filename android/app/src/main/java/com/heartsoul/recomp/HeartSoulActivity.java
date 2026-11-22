@@ -4,6 +4,7 @@ import android.app.ActivityOptions;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.graphics.Point;
 import android.os.Bundle;
 import android.os.Handler;
@@ -170,6 +171,7 @@ public class HeartSoulActivity extends SDLActivity {
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
         installSingleScreenAccess();
     }
 
@@ -180,15 +182,22 @@ public class HeartSoulActivity extends SDLActivity {
         if (root == null) return;
         Button open = new Button(this);
         open.setText("BOTTOM SCREEN");
-        open.setTextSize(10);
-        open.setAlpha(0.82f);
+        open.setTextSize(14);
+        open.setMinWidth(dp(140));
+        open.setMinHeight(dp(48));
+        open.setPadding(dp(14), dp(8), dp(14), dp(8));
+        open.setAlpha(0.96f);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.RIGHT);
-        params.topMargin = 8;
-        params.rightMargin = 8;
+        params.topMargin = dp(12);
+        params.rightMargin = dp(12);
         root.addView(open, params);
         open.setOnClickListener(v -> showSingleScreen());
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void showSingleScreen() {
