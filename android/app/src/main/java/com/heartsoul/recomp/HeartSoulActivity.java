@@ -49,6 +49,7 @@ public class HeartSoulActivity extends SDLActivity {
     private BottomScreenActivity focusReclaimedFor;
     private boolean resumed;
     private boolean coopHosting;
+    private boolean coopJoining;
 
     private static final long[] RECLAIM_DELAYS_MS = { 300, 800, 1500, 3000 };
 
@@ -133,6 +134,22 @@ public class HeartSoulActivity extends SDLActivity {
         coopHosting = "host".equals(coopMode);
         String coopAddress = getIntent().getStringExtra(EXTRA_COOP_ADDRESS);
         int coopPort = getIntent().getIntExtra(EXTRA_COOP_PORT, CoopNetwork.PORT);
+        if (coopHosting || "join".equals(coopMode)) {
+            String startError = CoopNetwork.start(this);
+            if (startError != null && !startError.isEmpty()) Log.e(TAG, startError);
+        }
+        if (coopHosting) {
+            if (!CoopNetwork.hostOpen()) Log.e(TAG, "could not open the ZeroTier host listener");
+        } else if ("join".equals(coopMode)) {
+            coopJoining = true;
+            int localPort = CoopNetwork.joinOpen(coopAddress);
+            if (localPort > 0) {
+                coopAddress = "127.0.0.1";
+                coopPort = localPort;
+            } else {
+                Log.e(TAG, "could not open the ZeroTier peer connection");
+            }
+        }
         try {
             android.system.Os.setenv("HNS_COOP_MODE", coopMode, true);
             android.system.Os.setenv("HNS_COOP_ADDRESS", coopAddress == null ? "" : coopAddress, true);
@@ -140,7 +157,6 @@ public class HeartSoulActivity extends SDLActivity {
         } catch (android.system.ErrnoException e) {
             Log.w(TAG, "could not configure direct co-op", e);
         }
-        if (coopHosting) CoopNetwork.startLeaseRenewal(getApplicationContext(), coopPort);
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);
@@ -186,7 +202,7 @@ public class HeartSoulActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
-        if (coopHosting) CoopNetwork.stopLeaseRenewal();
+        if (coopHosting || coopJoining) CoopNetwork.close();
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
         dismissPresentation();
