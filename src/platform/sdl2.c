@@ -756,7 +756,9 @@ int main(int argc, char **argv)
 
             SDL_RenderClear(sdlRenderer);
             SDL_RenderCopy(sdlRenderer, sdlTexture, &frameRect, NULL);
+#ifdef __ANDROID__
             DrawTouchControls(sdlRenderer);
+#endif
         }
         SDL_RenderPresent(sdlRenderer);
     }
