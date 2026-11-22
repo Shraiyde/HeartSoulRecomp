@@ -558,7 +558,6 @@ int main(int argc, char **argv)
 #endif
 
     ReadSaveFile("pokeemerald.sav");
-    Coop_Boot();
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) < 0)
     {
