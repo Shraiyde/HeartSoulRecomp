@@ -262,7 +262,7 @@ public class HeartSoulActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
-        if (coopHosting) CoopLobby.stopHosting();
+        if (coopHosting) CoopLobby.stopHosting(this);
         if (coopHosting || coopJoining) CoopNetwork.close();
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
