@@ -24,7 +24,9 @@ import org.libsdl.app.SDLActivity;
  * game, so a game launched without the start screen still uses them.
  */
 public class HeartSoulActivity extends SDLActivity {
-    static final String EXTRA_JOIN_PC_HOST = "joinPcHost";
+    static final String EXTRA_COOP_MODE = "coopMode";
+    static final String EXTRA_COOP_ADDRESS = "coopAddress";
+    static final String EXTRA_COOP_PORT = "coopPort";
     private static final String TAG = "HeartSoul";
     private static final long POLL_INTERVAL_MS = 100;
     private static final int DISPLAY_CHECK_TICKS = 10; // look for a display once a second
@@ -125,12 +127,16 @@ public class HeartSoulActivity extends SDLActivity {
         display.getRealSize(size);
         Settings settings = Settings.load(this, size.x, size.y);
         settings.applyToEnvironment();
-        if (getIntent().getBooleanExtra(EXTRA_JOIN_PC_HOST, false)) {
-            try {
-                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
-            } catch (android.system.ErrnoException e) {
-                Log.w(TAG, "could not arm PC host join", e);
-            }
+        String coopMode = getIntent().getStringExtra(EXTRA_COOP_MODE);
+        if (coopMode == null) coopMode = "solo";
+        String coopAddress = getIntent().getStringExtra(EXTRA_COOP_ADDRESS);
+        int coopPort = getIntent().getIntExtra(EXTRA_COOP_PORT, CoopNetwork.PORT);
+        try {
+            android.system.Os.setenv("HNS_COOP_MODE", coopMode, true);
+            android.system.Os.setenv("HNS_COOP_ADDRESS", coopAddress == null ? "" : coopAddress, true);
+            android.system.Os.setenv("HNS_COOP_PORT", Integer.toString(coopPort), true);
+        } catch (android.system.ErrnoException e) {
+            Log.w(TAG, "could not configure direct co-op", e);
         }
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
