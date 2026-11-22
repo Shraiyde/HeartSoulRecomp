@@ -756,6 +756,7 @@ int main(int argc, char **argv)
 
             SDL_RenderClear(sdlRenderer);
             SDL_RenderCopy(sdlRenderer, sdlTexture, &frameRect, NULL);
+            DrawTouchControls(sdlRenderer);
         }
         SDL_RenderPresent(sdlRenderer);
     }
@@ -922,6 +923,92 @@ static bool sPadFastForward;
 // threshold, so a trigger resting near the line does not toggle twice.
 static bool sPadTriggerIn;
 
+// Android touchscreen controls. Finger positions are normalized SDL coordinates,
+// so they remain in the correct places at every phone resolution.
+typedef struct { SDL_FingerID id; float x, y; bool active; } TouchPoint;
+static TouchPoint sTouchPoints[10];
+static u16 sTouchKeys;
+
+static u16 TouchKeysAt(float x, float y)
+{
+    const float dx = x - 0.16f;
+    const float dy = y - 0.78f;
+    u16 result = 0;
+    if (x < 0.43f && y > 0.43f && (dx * dx + dy * dy) < 0.105f) {
+        if (dx < -0.055f) result |= DPAD_LEFT;
+        if (dx >  0.055f) result |= DPAD_RIGHT;
+        if (dy < -0.055f) result |= DPAD_UP;
+        if (dy >  0.055f) result |= DPAD_DOWN;
+    }
+    if (x > 0.62f && y > 0.48f) {
+        float ax = x - 0.86f, ay = y - 0.72f;
+        float bx = x - 0.70f, by = y - 0.85f;
+        if (ax * ax + ay * ay < 0.018f) result |= A_BUTTON;
+        if (bx * bx + by * by < 0.018f) result |= B_BUTTON;
+    }
+    if (x > 0.38f && x < 0.64f && y > 0.84f) {
+        if (x < 0.51f) result |= SELECT_BUTTON;
+        else result |= START_BUTTON;
+    }
+    return result;
+}
+
+static void RebuildTouchKeys(void)
+{
+    int i;
+    sTouchKeys = 0;
+    for (i = 0; i < (int)(sizeof(sTouchPoints) / sizeof(sTouchPoints[0])); i++)
+        if (sTouchPoints[i].active)
+            sTouchKeys |= TouchKeysAt(sTouchPoints[i].x, sTouchPoints[i].y);
+}
+
+static void HandleTouchEvent(const SDL_TouchFingerEvent *finger, bool down)
+{
+    int i, freeSlot = -1;
+    for (i = 0; i < (int)(sizeof(sTouchPoints) / sizeof(sTouchPoints[0])); i++) {
+        if (sTouchPoints[i].active && sTouchPoints[i].id == finger->fingerId) {
+            if (down) {
+                sTouchPoints[i].x = finger->x;
+                sTouchPoints[i].y = finger->y;
+            } else {
+                sTouchPoints[i].active = false;
+            }
+            RebuildTouchKeys();
+            return;
+        }
+        if (!sTouchPoints[i].active && freeSlot < 0) freeSlot = i;
+    }
+    if (down && freeSlot >= 0) {
+        sTouchPoints[freeSlot].id = finger->fingerId;
+        sTouchPoints[freeSlot].x = finger->x;
+        sTouchPoints[freeSlot].y = finger->y;
+        sTouchPoints[freeSlot].active = true;
+        RebuildTouchKeys();
+    }
+}
+
+static void DrawTouchControls(SDL_Renderer *renderer)
+{
+    SDL_Rect r;
+    int w = gRenderWidth, h = gRenderHeight;
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 18, 24, 36, 145);
+    // D-pad: four separate arms around a clear centre.
+    r = (SDL_Rect){ 22, h - 62, 20, 62 }; SDL_RenderFillRect(renderer, &r);
+    r = (SDL_Rect){ 1, h - 42, 62, 20 }; SDL_RenderFillRect(renderer, &r);
+    // A and B buttons.
+    SDL_SetRenderDrawColor(renderer, 35, 112, 74, 190);
+    r = (SDL_Rect){ w - 48, h - 54, 39, 39 }; SDL_RenderFillRect(renderer, &r);
+    SDL_SetRenderDrawColor(renderer, 142, 58, 52, 190);
+    r = (SDL_Rect){ w - 91, h - 35, 35, 35 }; SDL_RenderFillRect(renderer, &r);
+    // Select and Start.
+    SDL_SetRenderDrawColor(renderer, 30, 34, 44, 180);
+    r = (SDL_Rect){ w / 2 - 34, h - 15, 28, 9 }; SDL_RenderFillRect(renderer, &r);
+    r = (SDL_Rect){ w / 2 + 7, h - 15, 28, 9 }; SDL_RenderFillRect(renderer, &r);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+
 static u16 PadKeyFromButton(Uint8 button)
 {
     switch (button)
@@ -1068,6 +1155,13 @@ void ProcessEvents(void)
                 break;
             }
             break;
+        case SDL_FINGERDOWN:
+        case SDL_FINGERMOTION:
+            HandleTouchEvent(&event.tfinger, true);
+            break;
+        case SDL_FINGERUP:
+            HandleTouchEvent(&event.tfinger, false);
+            break;
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
             {
@@ -1153,7 +1247,7 @@ u16 Platform_GetKeyInput(void)
     return (gamepadKeys != 0) ? gamepadKeys : keys;
 #endif
 
-    return keys | sPadKeys | PadStickKeys() | DualScreen_ConsumeInjectedKeys();
+    return keys | sPadKeys | sTouchKeys | PadStickKeys() | DualScreen_ConsumeInjectedKeys();
 }
 
 void VDraw(SDL_Texture *texture)
