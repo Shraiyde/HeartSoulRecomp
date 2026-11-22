@@ -17,6 +17,8 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 
+import java.util.List;
+
 /**
  * What the launcher opens: the start screen (StartScreenView), then the game.
  * If the game is already running, it goes straight back to it, since its
@@ -62,30 +64,14 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
     }
 
     private void startHosting() {
-        startZeroTier(true, "");
+        startZeroTier(true);
     }
 
     private void joinGame() {
-        EditText address = new EditText(this);
-        address.setSingleLine(true);
-        address.setHint("Host's ZeroTier IPv6 address");
-        address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        new AlertDialog.Builder(this).setTitle("JOIN A GAME")
-                .setMessage("Enter the IPv6 address shown on the host phone.")
-                .setView(address)
-                .setPositiveButton("CONNECT", (dialog, which) -> {
-                    String remote = address.getText().toString().trim();
-                    if (!remote.matches("[0-9A-Fa-f:]+") || !remote.contains(":")) {
-                        new AlertDialog.Builder(this).setMessage("Enter the host's full ZeroTier IPv6 address.")
-                                .setPositiveButton("OK", null).show();
-                        return;
-                    }
-                    startZeroTier(false, remote);
-                })
-                .setNegativeButton("CANCEL", null).show();
+        startZeroTier(false);
     }
 
-    private void startZeroTier(boolean host, String remoteAddress) {
+    private void startZeroTier(boolean host) {
         if (!CoopNetwork.available()) {
             new AlertDialog.Builder(this).setTitle("CO-OP UNAVAILABLE")
                     .setMessage("This APK is missing the embedded ZeroTier library. Rebuild it with libzt enabled.")
@@ -93,7 +79,7 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
             return;
         }
         android.app.ProgressDialog progress = android.app.ProgressDialog.show(this, "CO-OP",
-                "Connecting to the peer network...", true, false);
+                host ? "Connecting to the peer network..." : "Connecting to the peer network...", true, false);
         String error = CoopNetwork.start(this);
         if (error != null && !error.isEmpty()) {
             progress.dismiss();
@@ -107,18 +93,12 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
             @Override public void run() {
                 CoopNetwork.Status status = CoopNetwork.status();
                 if (status.ready()) {
-                    progress.dismiss();
                     if (host) {
-                        String message = "HOST ADDRESS:\n" + status.address
-                                + "\n\nShare this IPv6 address with the other player. "
-                                + "They enter it under JOIN A GAME. This phone will host the world and play.";
-                        new AlertDialog.Builder(StartActivity.this).setTitle("READY TO HOST")
-                                .setMessage(message)
-                                .setPositiveButton("START HOSTING",
-                                        (dialog, which) -> launchGame("host", "", CoopNetwork.PORT))
-                                .setNegativeButton("CANCEL", null).show();
+                        progress.dismiss();
+                        launchGame("host", "", CoopNetwork.PORT);
                     } else {
-                        launchGame("join", remoteAddress, CoopNetwork.PORT);
+                        progress.setMessage("Finding active games...");
+                        loadLobbyList(progress);
                     }
                     return;
                 }
@@ -133,6 +113,33 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
             }
         };
         handler.postDelayed(poll, 250);
+    }
+
+    private void loadLobbyList(android.app.ProgressDialog progress) {
+        new Thread(() -> {
+            List<CoopLobby.Lobby> lobbies = CoopLobby.fetchLobbies(StartActivity.this);
+            String error = CoopLobby.lastError();
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                progress.dismiss();
+                if (lobbies.isEmpty()) {
+                    new AlertDialog.Builder(StartActivity.this).setTitle("JOIN A GAME")
+                            .setMessage(error.isEmpty() ? "No active phone-hosted games were found." : error)
+                            .setPositiveButton("RETRY", (dialog, which) -> joinGame())
+                            .setNegativeButton("CANCEL", null).show();
+                    return;
+                }
+                String[] labels = new String[lobbies.size()];
+                for (int i = 0; i < lobbies.size(); i++) labels[i] = lobbies.get(i).label();
+                new AlertDialog.Builder(StartActivity.this).setTitle("JOIN A GAME")
+                        .setItems(labels, (dialog, which) -> {
+                            CoopLobby.Lobby lobby = lobbies.get(which);
+                            launchGame("join", lobby.address, lobby.port);
+                        })
+                        .setNegativeButton("REFRESH", (dialog, which) -> joinGame())
+                        .show();
+            });
+        }, "heartsoul-lobby-list").start();
     }
 
     private void launchGame(boolean joinPcHost) {
