@@ -82,6 +82,9 @@ extern void DoSoftReset(void);
 int DoMain(void *param);
 void ProcessEvents(void);
 void VDraw(SDL_Texture *texture);
+#ifdef __ANDROID__
+static void DrawTouchControls(SDL_Renderer *renderer);
+#endif
 
 static void ReadSaveFile(char *path);
 static void StoreSaveFile(void);
