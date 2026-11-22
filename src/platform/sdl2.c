@@ -992,6 +992,7 @@ static void HandleTouchEvent(const SDL_TouchFingerEvent *finger, bool down)
     }
 }
 
+#ifdef __ANDROID__
 static void DrawTouchControls(SDL_Renderer *renderer)
 {
     SDL_Rect r;
@@ -1022,6 +1023,7 @@ static void DrawTouchControls(SDL_Renderer *renderer)
     SDL_RenderDrawLine(renderer, w - 68, h - 13, w - 79, h - 7);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
+#endif
 
 
 static u16 PadKeyFromButton(Uint8 button)
