@@ -101,7 +101,7 @@ final class CoopNetwork {
         String body = "<?xml version=\"1.0\"?>"
                 + "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
                 + "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body>"
-                + "<u:AddPortMapping xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">"
+                + "<u:AddPortMapping xmlns:u=\"" + upnpServiceType + "\">"
                 + "<NewRemoteHost></NewRemoteHost><NewExternalPort>" + port + "</NewExternalPort>"
                 + "<NewProtocol>TCP</NewProtocol><NewInternalPort>" + port + "</NewInternalPort>"
                 + "<NewInternalClient>" + local + "</NewInternalClient><NewEnabled>1</NewEnabled>"
@@ -116,7 +116,7 @@ final class CoopNetwork {
         if (control.isEmpty()) return "";
         String body = "<?xml version=\"1.0\"?>"
                 + "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body>"
-                + "<u:GetExternalIPAddress xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\"/>"
+                + "<u:GetExternalIPAddress xmlns:u=\"" + upnpServiceType + "\"/>"
                 + "</s:Body></s:Envelope>";
         byte[] response = soap(control,
                 upnpServiceType + "#GetExternalIPAddress", body);
