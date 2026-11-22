@@ -48,6 +48,7 @@ public class HeartSoulActivity extends SDLActivity {
     private boolean bottomActivityLaunched;
     private BottomScreenActivity focusReclaimedFor;
     private boolean resumed;
+    private boolean coopHosting;
 
     private static final long[] RECLAIM_DELAYS_MS = { 300, 800, 1500, 3000 };
 
@@ -129,6 +130,7 @@ public class HeartSoulActivity extends SDLActivity {
         settings.applyToEnvironment();
         String coopMode = getIntent().getStringExtra(EXTRA_COOP_MODE);
         if (coopMode == null) coopMode = "solo";
+        coopHosting = "host".equals(coopMode);
         String coopAddress = getIntent().getStringExtra(EXTRA_COOP_ADDRESS);
         int coopPort = getIntent().getIntExtra(EXTRA_COOP_PORT, CoopNetwork.PORT);
         try {
@@ -138,6 +140,7 @@ public class HeartSoulActivity extends SDLActivity {
         } catch (android.system.ErrnoException e) {
             Log.w(TAG, "could not configure direct co-op", e);
         }
+        if (coopHosting) CoopNetwork.startLeaseRenewal(getApplicationContext(), coopPort);
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);
@@ -183,6 +186,7 @@ public class HeartSoulActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (coopHosting) CoopNetwork.stopLeaseRenewal();
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
         dismissPresentation();
