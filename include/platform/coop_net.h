@@ -35,8 +35,8 @@ struct CoopRemoteView
     uint32_t ageMs;
 };
 
-/* Start the single PC-host connection if HNS_COOP_JOIN=1. No-op otherwise
- * and no-op when a connection is already up. */
+/* Start a direct phone-hosted session when HNS_COOP_MODE is 'host' or 'join'.
+ * The host listens; the guest connects to HNS_COOP_ADDRESS. */
 void CoopNet_Boot(void);
 
 bool CoopNet_IsUp(void);
