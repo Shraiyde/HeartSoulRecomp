@@ -18,6 +18,9 @@ import java.net.NetworkInterface;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.xml.parsers.DocumentBuilderFactory;
 
 /** Direct phone-to-phone TCP hosting helpers. No lobby, relay, or game server. */
@@ -26,6 +29,7 @@ final class CoopNetwork {
     private static final String ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final long INTERNET_TAG = 0x100000000L;
     private static String upnpServiceType = "urn:schemas-upnp-org:service:WANIPConnection:1";
+    private static ScheduledExecutorService leaseWorker;
 
     static final class HostInfo {
         final String localAddress;
@@ -57,6 +61,7 @@ final class CoopNetwork {
     }
 
     static String localAddress() {
+        String fallback = "";
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
@@ -64,13 +69,33 @@ final class CoopNetwork {
                 Enumeration<InetAddress> addresses = network.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     InetAddress address = addresses.nextElement();
-                    if (address instanceof Inet4Address && !address.isLoopbackAddress()
-                            && !address.isLinkLocalAddress() && address.isSiteLocalAddress())
-                        return address.getHostAddress();
+                    if (!(address instanceof Inet4Address) || address.isLoopbackAddress()
+                            || address.isLinkLocalAddress() || !address.isSiteLocalAddress()) continue;
+                    String value = address.getHostAddress();
+                    String name = network.getName().toLowerCase(java.util.Locale.US);
+                    if (name.startsWith("wlan") || name.startsWith("eth")) return value;
+                    if (fallback.isEmpty()) fallback = value;
                 }
             }
         } catch (Exception ignored) {}
-        return "";
+        return fallback;
+    }
+
+    static synchronized void startLeaseRenewal(Context context, int port) {
+        stopLeaseRenewal();
+        final Context app = context.getApplicationContext();
+        leaseWorker = Executors.newSingleThreadScheduledExecutor();
+        leaseWorker.scheduleWithFixedDelay(() -> {
+            try { addUpnpMapping(app, localAddress(), port); }
+            catch (Exception ignored) {}
+        }, 30, 30, TimeUnit.MINUTES);
+    }
+
+    static synchronized void stopLeaseRenewal() {
+        if (leaseWorker != null) {
+            leaseWorker.shutdownNow();
+            leaseWorker = null;
+        }
     }
 
     static String publicAddress() {
