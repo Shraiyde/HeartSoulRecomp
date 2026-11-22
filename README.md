@@ -182,3 +182,8 @@ Here is what AI has been used for:
 
 AI has not been used for:
 - Generating assets of any kind; Art or Music
+
+
+## Android touchscreen
+
+On phones, the game displays a touch D-pad, A and B, Start, and Select over the game picture. Hold a direction and press a face button at the same time for multi-touch input. The **BOTTOM SCREEN** button opens the companion interface on a single-display phone; **RETURN TO GAME** closes it.
