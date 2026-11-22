@@ -1,6 +1,7 @@
 package com.heartsoul.recomp;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -8,6 +9,8 @@ import android.graphics.Point;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Display;
+import android.text.InputType;
+import android.widget.EditText;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -46,12 +49,71 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
     @Override
     public void onJoinPcHost(Settings settings) {
         settings.save(this);
-        launchGame(true);
+        new AlertDialog.Builder(this)
+                .setTitle("CO-OP")
+                .setItems(new String[] { "HOST A GAME", "JOIN A GAME" }, (dialog, which) -> {
+                    if (which == 0) startHosting();
+                    else joinGame();
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private void startHosting() {
+        android.app.ProgressDialog progress = android.app.ProgressDialog.show(this, "CO-OP",
+                "Checking the router and preparing a direct connection...", true, false);
+        new Thread(() -> {
+            CoopNetwork.HostInfo info = CoopNetwork.prepareHost(this, CoopNetwork.PORT);
+            runOnUiThread(() -> {
+                progress.dismiss();
+                StringBuilder message = new StringBuilder();
+                if (!info.joinCode.isEmpty()) message.append("JOIN CODE: ").append(info.joinCode).append("\\n\\n");
+                if (!info.publicAddress.isEmpty())
+                    message.append("INTERNET: ").append(info.publicAddress).append(":").append(CoopNetwork.PORT).append("\\n");
+                if (!info.localAddress.isEmpty())
+                    message.append("SAME WI-FI: ").append(info.localAddress).append(":").append(CoopNetwork.PORT).append("\\n");
+                message.append("\\n");
+                if (info.mapped) message.append("Router port opened automatically with UPnP.");
+                else message.append("Automatic port mapping was unavailable. For internet play, forward TCP ")
+                        .append(CoopNetwork.PORT).append(" to this phone on your router.");
+                new AlertDialog.Builder(this).setTitle("HOST CODE")
+                        .setMessage(message.toString())
+                        .setPositiveButton("START HOSTING", (d, w) -> launchGame("host", "", CoopNetwork.PORT))
+                        .setNegativeButton("CANCEL", null).show();
+            });
+        }).start();
+    }
+
+    private void joinGame() {
+        EditText address = new EditText(this);
+        address.setSingleLine(true);
+        address.setHint("8-character code or IP:PORT");
+        address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+                | InputType.TYPE_TEXT_VARIATION_URI);
+        new AlertDialog.Builder(this).setTitle("JOIN A GAME")
+                .setMessage("Enter the host's join code or direct IPv4 address.")
+                .setView(address)
+                .setPositiveButton("JOIN", (dialog, which) -> {
+                    String[] target = CoopNetwork.parseAddress(address.getText().toString());
+                    if (target == null) {
+                        new AlertDialog.Builder(this).setMessage("That join code or address is invalid.")
+                                .setPositiveButton("OK", null).show();
+                        return;
+                    }
+                    launchGame("join", target[0], Integer.parseInt(target[1]));
+                })
+                .setNegativeButton("CANCEL", null).show();
     }
 
     private void launchGame(boolean joinPcHost) {
+        launchGame(joinPcHost ? "join" : "solo", "", CoopNetwork.PORT);
+    }
+
+    private void launchGame(String mode, String address, int port) {
         Intent intent = new Intent(this, HeartSoulActivity.class);
-        intent.putExtra(HeartSoulActivity.EXTRA_JOIN_PC_HOST, joinPcHost);
+        intent.putExtra(HeartSoulActivity.EXTRA_COOP_MODE, mode);
+        intent.putExtra(HeartSoulActivity.EXTRA_COOP_ADDRESS, address);
+        intent.putExtra(HeartSoulActivity.EXTRA_COOP_PORT, port);
         startActivity(intent);
         overridePendingTransition(0, 0);
         finish();
