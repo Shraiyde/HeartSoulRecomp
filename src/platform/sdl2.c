@@ -936,6 +936,8 @@ static u16 sTouchKeys;
 
 static u16 TouchKeysAt(float x, float y)
 {
+    if (x < 0.0f || x > 1.0f || y < 0.0f || y > 1.0f)
+        return 0;
     const float dx = x - 0.16f;
     const float dy = y - 0.78f;
     u16 result = 0;
@@ -970,11 +972,33 @@ static void RebuildTouchKeys(void)
 static void HandleTouchEvent(const SDL_TouchFingerEvent *finger, bool down)
 {
     int i, freeSlot = -1;
+    float x = finger->x, y = finger->y;
+    int logicalW = 0, logicalH = 0;
+
+    // Finger coordinates cover the whole Android window. When SDL keeps the
+    // game's aspect ratio, convert through its logical viewport so touch
+    // targets stay aligned with the controls even in the letterbox bars.
+    if (sdlRenderer != NULL && sdlWindow != NULL) {
+        SDL_RenderGetLogicalSize(sdlRenderer, &logicalW, &logicalH);
+        if (logicalW > 0 && logicalH > 0) {
+            int windowW = 0, windowH = 0;
+            float logicalX = 0.0f, logicalY = 0.0f;
+            SDL_GetWindowSize(sdlWindow, &windowW, &windowH);
+            if (windowW > 0 && windowH > 0) {
+                SDL_RenderWindowToLogical(sdlRenderer,
+                        (int)(finger->x * windowW), (int)(finger->y * windowH),
+                        &logicalX, &logicalY);
+                x = logicalX / logicalW;
+                y = logicalY / logicalH;
+            }
+        }
+    }
+
     for (i = 0; i < (int)(sizeof(sTouchPoints) / sizeof(sTouchPoints[0])); i++) {
         if (sTouchPoints[i].active && sTouchPoints[i].id == finger->fingerId) {
             if (down) {
-                sTouchPoints[i].x = finger->x;
-                sTouchPoints[i].y = finger->y;
+                sTouchPoints[i].x = x;
+                sTouchPoints[i].y = y;
             } else {
                 sTouchPoints[i].active = false;
             }
@@ -985,8 +1009,8 @@ static void HandleTouchEvent(const SDL_TouchFingerEvent *finger, bool down)
     }
     if (down && freeSlot >= 0) {
         sTouchPoints[freeSlot].id = finger->fingerId;
-        sTouchPoints[freeSlot].x = finger->x;
-        sTouchPoints[freeSlot].y = finger->y;
+        sTouchPoints[freeSlot].x = x;
+        sTouchPoints[freeSlot].y = y;
         sTouchPoints[freeSlot].active = true;
         RebuildTouchKeys();
     }
