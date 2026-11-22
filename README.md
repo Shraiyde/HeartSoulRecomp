@@ -32,7 +32,7 @@ Requirements: Android 8 or newer on an ARM device. The APK contains both a 64-bi
 
 ## Two-player co-op
 
-Choose **CO-OP** on the start screen, then host a game or join a friend's game. The host's phone runs the world and remains a player; the other phone connects directly to it over TCP. The host shares an eight-character join code or an IPv4 address. The app tries to open TCP port 54555 on the router with UPnP. If the router does not support UPnP, forward TCP port 54555 to the hosting phone manually. Both phones must be able to reach the host address. This is direct host/client networking: there is no dedicated game server, lobby service, or relay. Carrier-grade NAT or restrictive mobile networks can prevent direct internet connections.
+Choose **CO-OP** on the start screen, then host a game or join a friend's game. The host's phone runs the world and remains a player; the other phone connects directly to it over TCP. Android embeds the same controller-less ZeroTier peer network used by PokeWilds Mobile: no separate ZeroTier app, account, network owner, or lobby is needed. The host shares the IPv6 address shown on their phone, and the other player enters it under **JOIN A GAME**. The game data travels between the phones over the peer network; there is no dedicated game server. ZeroTier's root infrastructure helps peers find one another and may relay traffic if a direct path cannot be established. The embedded library is under the ZeroTier BSL 1.1; see `LICENSES/ZeroTier-libzt-BSL-1.1.txt`.
 
 ## The bottom screen
 
