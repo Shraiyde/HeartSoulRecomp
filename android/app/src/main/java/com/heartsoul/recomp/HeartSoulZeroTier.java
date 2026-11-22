@@ -9,6 +9,13 @@ import com.zerotier.sockets.ZeroTierNative;
 import com.zerotier.sockets.ZeroTierSocket;
 
 import java.io.File;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ConcurrentHashMap;
+import java.nio.charset.StandardCharsets;
+import java.net.URL;
+import java.net.HttpURLConnection;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
@@ -487,4 +494,73 @@ public final class HeartSoulZeroTier {
     }
 
     public static int linkCount() { return links.get(); }
+
+    // ------------------------------------------------------ lobby directory
+
+    // Lobby-list requests run outside the game thread. Gameplay packets never
+    // pass through this HTTPS service; it only returns peer addresses.
+    private static final ExecutorService HTTP = Executors.newFixedThreadPool(2, runnable -> {
+        Thread thread = new Thread(runnable, "heartsoul-lobby-http");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final ConcurrentHashMap<Integer, String> httpResults = new ConcurrentHashMap<>();
+    private static final AtomicInteger httpIds = new AtomicInteger();
+    private static volatile String lobbyKey = "";
+
+    /** Lobby-directory password for the next httpStart(); an empty value sends none. */
+    public static void setLobbyKey(String key) {
+        lobbyKey = key == null ? "" : key;
+    }
+
+    /** Starts a GET (empty body) or JSON POST. Returns an id for httpTake(). */
+    public static int httpStart(final String address, final String body) {
+        final int id = httpIds.incrementAndGet();
+        final String key = lobbyKey;
+        HTTP.execute(new Runnable() {
+            @Override public void run() {
+                String result = "0\\n";
+                HttpURLConnection connection = null;
+                try {
+                    connection = (HttpURLConnection) new URL(address).openConnection();
+                    connection.setConnectTimeout(10000);
+                    connection.setReadTimeout(10000);
+                    connection.setUseCaches(false);
+                    if (!key.isEmpty()) connection.setRequestProperty("X-Lobby-Key", key);
+                    if (body != null && !body.isEmpty()) {
+                        byte[] data = body.getBytes(StandardCharsets.UTF_8);
+                        connection.setRequestMethod("POST");
+                        connection.setRequestProperty("Content-Type", "application/json");
+                        connection.setDoOutput(true);
+                        connection.setFixedLengthStreamingMode(data.length);
+                        try (OutputStream out = connection.getOutputStream()) { out.write(data); }
+                    }
+                    int code = connection.getResponseCode();
+                    InputStream stream = code >= 400 ? connection.getErrorStream() : connection.getInputStream();
+                    ByteArrayOutputStream text = new ByteArrayOutputStream();
+                    if (stream != null) {
+                        byte[] buffer = new byte[4096];
+                        int count;
+                        while ((count = stream.read(buffer)) > 0 && text.size() < 262144) text.write(buffer, 0, count);
+                        stream.close();
+                    }
+                    result = code + "\\n" + new String(text.toByteArray(), StandardCharsets.UTF_8);
+                } catch (Exception error) {
+                    Log.w(TAG, "lobby directory request failed: " + error);
+                } finally {
+                    if (connection != null) connection.disconnect();
+                }
+                httpResults.keySet().removeIf(old -> old <= id - 64);
+                httpResults.put(id, result);
+            }
+        });
+        return id;
+    }
+
+    /** Empty while pending, else "status\\nbody" once; status 0 means it failed. */
+    public static String httpTake(int id) {
+        String result = httpResults.remove(id);
+        return result == null ? "" : result;
+    }
+
 }
