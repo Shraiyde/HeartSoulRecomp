@@ -9,6 +9,7 @@ on:
     branches:
       - port
       - cursor/native-coop-cf76
+      - coop/direct-phone-host
     tags:
       - recomp-coop-1
   workflow_dispatch:
