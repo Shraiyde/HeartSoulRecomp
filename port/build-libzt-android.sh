@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LIBZT_SRC="${LIBZT_SRC:-$HERE/../third_party/libzt}"
 # Build outside the source drive: exFAT/FAT volumes break Gradle and CMake.
 WORK="${LIBZT_WORK:-$HOME/.cache/heartsoul-libzt}"
-OUT="$HERE/android/app/libs/zerotier"
+OUT="$HERE/../android/app/libs/zerotier"
 NDK_VERSION="${NDK_VERSION:-29.0.14206865}"   # same NDK the Godot export uses
 CMAKE_VERSION="${CMAKE_VERSION:-3.22.1}"
 
@@ -25,7 +25,7 @@ CMAKE_VERSION="${CMAKE_VERSION:-3.22.1}"
 mkdir -p "$WORK" "$OUT"
 rsync -a --delete --exclude '.git' --exclude '._*' --exclude 'cache' --exclude 'dist' "$LIBZT_SRC/" "$WORK/"
 
-python3 "$HERE/port/libzt_patches.py" "$WORK"
+python3 "$HERE/libzt_patches.py" "$WORK"
 
 GRADLE="$WORK/pkg/android/app/build.gradle"
 # Only the two ABIs the game exports, built with the game's NDK.
