@@ -7,26 +7,19 @@ import com.zerotier.sockets.ZeroTierNative;
 import com.zerotier.sockets.ZeroTierSocket;
 
 import java.io.File;
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Embedded ZeroTier node (libzt) for ONLINE play. No ZeroTier app, account or
- * address entry is needed on the device, and nobody administers a network:
+ * Embedded ZeroTier node (libzt) for online play. No separate ZeroTier app,
+ * account, or manually created network is needed; the host shares its address:
  * the game uses a ZeroTier ad-hoc network, which has no controller, no member
  * list and no member limit. It carries only IPv6 TCP/UDP to the game's port.
  *
@@ -34,8 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * carries those bytes across the ZeroTier network through loopback:
  *   host:  ZeroTier listener  -> 127.0.0.1:<game port>
  *   guest: 127.0.0.1:<random> -> ZeroTier connection to the host
- * Ad-hoc networks cannot broadcast, so the lobby list comes from the lobby
- * directory service instead (see coop_lobby.gd).
+ * The host address is shared directly between the two players; no lobby
+ * directory or game server is involved.
  *
  * Every method is static and uses only String/int/boolean so GDScript can call
  * it through JavaClassWrapper, like PokeWildsStorage.
