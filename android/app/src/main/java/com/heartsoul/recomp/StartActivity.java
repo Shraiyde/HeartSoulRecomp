@@ -122,7 +122,7 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
                     }
                     return;
                 }
-                if (status.failed() || ++attempts[0] >= 360) {
+                if (status.failed() || ++attempts[0] >= 600) {
                     progress.dismiss();
                     String reason = status.message.isEmpty() ? "The peer network did not become ready." : status.message;
                     new AlertDialog.Builder(StartActivity.this).setTitle("CO-OP CONNECTION FAILED")
