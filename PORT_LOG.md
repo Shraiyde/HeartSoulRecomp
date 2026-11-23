@@ -13,6 +13,29 @@ Rules for this log:
 
 ---
 
+## 2026-11-23, phone controls and audio
+
+State at end of session: `recomp-phone-1` (`4017e2b982`) crackled and its
+on-screen buttons did nothing and covered the picture. Not played on a phone.
+
+### Done
+
+- Audio cause: the device callback buffer was still 1024 frames (~24 ms).
+  The touch overlay is drawn on the game thread before vsync, so that
+  callback runs late. The 100 ms SDL queue from `recomp-coop-1` was
+  unchanged and never reached the speaker in time. The callback buffer is
+  now 4096 frames, and the queue is filled again after the overlay is drawn.
+- Buttons are laid out in the band under a uniformly scaled picture. L is
+  above the D-pad and R is above A/B. A finger sets the matching GBA key
+  until it lifts. The old hit test mapped touches through the letterboxed
+  logical rect, which put them outside 0..1, so every button was ignored.
+
+### Next
+
+- Tag `recomp-phone-2` after the `port` compile is green.
+
+---
+
 ## 2026-11-23, phone APK compile
 
 State at end of session: the phone host, joiner, and lobby client are in

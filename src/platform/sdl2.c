@@ -83,7 +83,14 @@ int DoMain(void *param);
 void ProcessEvents(void);
 void VDraw(SDL_Texture *texture);
 #ifdef __ANDROID__
-static void DrawTouchControls(SDL_Renderer *renderer);
+typedef struct TouchLayout {
+    int w, h;
+    SDL_Rect game;
+    SDL_Rect l, r, a, b, selectBtn, startBtn;
+    int dpadCx, dpadCy, dpadReach;
+} TouchLayout;
+static void BuildTouchLayout(TouchLayout *layout);
+static void DrawTouchControls(SDL_Renderer *renderer, const TouchLayout *layout);
 #endif
 
 static void ReadSaveFile(char *path);
@@ -118,6 +125,13 @@ static void ApplyScaleMode(void)
 {
     if (sdlRenderer == NULL)
         return;
+#ifdef __ANDROID__
+    // The phone layout places the picture itself. A logical size would
+    // letterbox it in the middle and draw the controls on top of it.
+    SDL_RenderSetLogicalSize(sdlRenderer, 0, 0);
+    SDL_RenderSetIntegerScale(sdlRenderer, SDL_FALSE);
+    return;
+#endif
     if (sScaleMode == SCALE_STRETCH)
     {
         // No logical size: the frame is copied over the whole output.
@@ -532,6 +546,21 @@ static void ReportPerformance(Uint64 now)
     sUnderrunsAtStart = sAudioUnderruns;
 }
 
+static void RefillAudioQueue(void)
+{
+    Uint32 queued = SDL_GetQueuedAudioSize(1) / 8;
+    int updates = 0;
+
+    if (queued == 0)
+        sAudioUnderruns++;
+    while (queued < AUDIO_QUEUE_TARGET && updates < 8)
+    {
+        AudioUpdate();
+        queued = SDL_GetQueuedAudioSize(1) / 8;
+        updates++;
+    }
+}
+
 int main(int argc, char **argv)
 {
     const char *headlessFrames = getenv("HNS_HEADLESS_FRAMES");
@@ -653,7 +682,9 @@ int main(int argc, char **argv)
     want.freq = 42048;
     want.format = AUDIO_F32;
     want.channels = 2;
-    want.samples = 1024;
+    // ~97 ms. 1024 frames is only ~24 ms, and the callback underruns when the
+    // game thread is busy drawing the touch controls before vsync.
+    want.samples = 4096;
     cgb_audio_init(want.freq);
 
 
@@ -729,19 +760,7 @@ int main(int argc, char **argv)
             // float samples, 8 bytes each). Keep about 100 ms queued and refill
             // it completely each pass, so a slow frame or a late vsync on a
             // handheld does not empty the device buffer and leave a gap.
-            {
-                Uint32 queued = SDL_GetQueuedAudioSize(1) / 8;
-                int updates = 0;
-
-                if (queued == 0)
-                    sAudioUnderruns++;
-                while (queued < AUDIO_QUEUE_TARGET && updates < 8)
-                {
-                    AudioUpdate();
-                    queued = SDL_GetQueuedAudioSize(1) / 8;
-                    updates++;
-                }
-            }
+            RefillAudioQueue();
             ReportPerformance(SDL_GetPerformanceCounter());
 
             if (videoScaleChanged)
@@ -754,14 +773,25 @@ int main(int argc, char **argv)
         lastGameTime = curGameTime;
 
         {
+#ifdef __ANDROID__
+            TouchLayout layout;
+            SDL_Rect frameRect = {0, 0, gRenderWidth, gRenderHeight};
+
+            BuildTouchLayout(&layout);
+            SDL_RenderSetViewport(sdlRenderer, NULL);
+            SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
+            SDL_RenderClear(sdlRenderer);
+            SDL_RenderCopy(sdlRenderer, sdlTexture, &frameRect, &layout.game);
+            DrawTouchControls(sdlRenderer, &layout);
+#else
             SDL_Rect frameRect = {0, 0, gRenderWidth, gRenderHeight};
 
             SDL_RenderClear(sdlRenderer);
             SDL_RenderCopy(sdlRenderer, sdlTexture, &frameRect, NULL);
-#ifdef __ANDROID__
-            DrawTouchControls(sdlRenderer);
 #endif
         }
+        if (!paused)
+            RefillAudioQueue();
         SDL_RenderPresent(sdlRenderer);
     }
 
@@ -927,34 +957,154 @@ static bool sPadFastForward;
 // threshold, so a trigger resting near the line does not toggle twice.
 static bool sPadTriggerIn;
 
-// Android touchscreen controls. Finger positions are normalized SDL coordinates,
-// so they remain in the correct places at every phone resolution.
-typedef struct { SDL_FingerID id; float x, y; bool active; } TouchPoint;
+// Android touchscreen controls. Positions are output pixels, the same space
+// the buttons are drawn in. A finger stays held until it lifts.
+typedef struct { SDL_FingerID id; int x, y; bool active; } TouchPoint;
 static TouchPoint sTouchPoints[10];
 static u16 sTouchKeys;
 
-static u16 TouchKeysAt(float x, float y)
+static void TouchOutputSize(int *w, int *h)
 {
-    if (x < 0.0f || x > 1.0f || y < 0.0f || y > 1.0f)
-        return 0;
-    const float dx = x - 0.16f;
-    const float dy = y - 0.78f;
+    *w = 0;
+    *h = 0;
+    if (sdlRenderer != NULL)
+        SDL_GetRendererOutputSize(sdlRenderer, w, h);
+    if ((*w <= 0 || *h <= 0) && sdlWindow != NULL)
+        SDL_GetWindowSize(sdlWindow, w, h);
+    if (*w <= 0)
+        *w = gRenderWidth;
+    if (*h <= 0)
+        *h = gRenderHeight;
+}
+
+static void BuildTouchLayout(TouchLayout *layout)
+{
+    int w, h, band, gameMaxH, gw, gh;
+    int top, bandH, rowH, btnH, btnW, face, reach;
+
+    TouchOutputSize(&w, &h);
+    memset(layout, 0, sizeof(*layout));
+    layout->w = w;
+    layout->h = h;
+    // The bottom of the screen is only buttons. The picture keeps its shape
+    // in whatever is left above them.
+    band = h * 42 / 100;
+    if (band < h / 3)
+        band = h / 3;
+    if (band > h * 55 / 100)
+        band = h * 55 / 100;
+    gameMaxH = h - band;
+    if (gameMaxH < 1)
+        gameMaxH = 1;
+    gw = gRenderWidth > 0 ? gRenderWidth : 240;
+    gh = gRenderHeight > 0 ? gRenderHeight : 160;
+    if ((long)w * gh <= (long)gameMaxH * gw)
+    {
+        layout->game.w = w;
+        layout->game.h = (int)((long)w * gh / gw);
+    }
+    else
+    {
+        layout->game.h = gameMaxH;
+        layout->game.w = (int)((long)gameMaxH * gw / gh);
+    }
+    if (layout->game.w < 1)
+        layout->game.w = 1;
+    if (layout->game.h < 1)
+        layout->game.h = 1;
+    layout->game.x = (w - layout->game.w) / 2;
+    layout->game.y = 0;
+
+    top = layout->game.y + layout->game.h;
+    bandH = h - top;
+    if (bandH < 3)
+        bandH = 3;
+    rowH = bandH / 3;
+    btnH = rowH * 70 / 100;
+    if (btnH > w * 14 / 100)
+        btnH = w * 14 / 100;
+    if (btnH < 8)
+        btnH = 8;
+    btnW = w * 18 / 100;
+    if (btnW < btnH)
+        btnW = btnH;
+    layout->l = (SDL_Rect){ w * 6 / 100, top + (rowH - btnH) / 2, btnW, btnH };
+    layout->r = (SDL_Rect){ w - w * 6 / 100 - btnW, top + (rowH - btnH) / 2, btnW, btnH };
+
+    reach = rowH * 42 / 100;
+    if (reach < 12)
+        reach = 12;
+    layout->dpadReach = reach;
+    layout->dpadCx = w * 24 / 100;
+    if (layout->dpadCx < reach)
+        layout->dpadCx = reach;
+    layout->dpadCy = top + rowH + rowH / 2;
+    if (layout->dpadCy + reach > h)
+        layout->dpadCy = h - reach;
+
+    face = btnH;
+    if (face > w * 16 / 100)
+        face = w * 16 / 100;
+    if (face < 12)
+        face = 12;
+    layout->a = (SDL_Rect){ w * 84 / 100 - face / 2, layout->dpadCy - face / 2, face, face };
+    layout->b = (SDL_Rect){ w * 66 / 100 - face / 2, layout->dpadCy - face / 2 + face / 6, face, face };
+
+    {
+        int sw = w * 22 / 100;
+        int sh = btnH * 70 / 100;
+        int sy;
+
+        if (sh < 8)
+            sh = 8;
+        sy = top + rowH * 2 + (rowH - sh) / 2;
+        if (sy + sh > h)
+            sy = h - sh;
+        layout->selectBtn = (SDL_Rect){ w / 2 - sw - w / 80, sy, sw, sh };
+        layout->startBtn = (SDL_Rect){ w / 2 + w / 80, sy, sw, sh };
+    }
+}
+
+static int TouchRectContains(const SDL_Rect *r, int x, int y)
+{
+    return x >= r->x && y >= r->y && x < r->x + r->w && y < r->y + r->h;
+}
+
+static u16 TouchKeysAt(int x, int y)
+{
+    TouchLayout layout;
+    int dx, dy, ax, ay;
     u16 result = 0;
-    if (x < 0.43f && y > 0.43f && (dx * dx + dy * dy) < 0.105f) {
-        if (dx < -0.055f) result |= DPAD_LEFT;
-        if (dx >  0.055f) result |= DPAD_RIGHT;
-        if (dy < -0.055f) result |= DPAD_UP;
-        if (dy >  0.055f) result |= DPAD_DOWN;
-    }
-    if (x > 0.62f && y > 0.48f) {
-        float ax = x - 0.86f, ay = y - 0.79f;
-        float bx = x - 0.70f, by = y - 0.85f;
-        if (ax * ax + ay * ay < 0.018f) result |= A_BUTTON;
-        if (bx * bx + by * by < 0.018f) result |= B_BUTTON;
-    }
-    if (x > 0.38f && x < 0.64f && y > 0.84f) {
-        if (x < 0.51f) result |= SELECT_BUTTON;
-        else result |= START_BUTTON;
+
+    BuildTouchLayout(&layout);
+    if (TouchRectContains(&layout.l, x, y))
+        result |= L_BUTTON;
+    if (TouchRectContains(&layout.r, x, y))
+        result |= R_BUTTON;
+    if (TouchRectContains(&layout.a, x, y))
+        result |= A_BUTTON;
+    if (TouchRectContains(&layout.b, x, y))
+        result |= B_BUTTON;
+    if (TouchRectContains(&layout.selectBtn, x, y))
+        result |= SELECT_BUTTON;
+    if (TouchRectContains(&layout.startBtn, x, y))
+        result |= START_BUTTON;
+    dx = x - layout.dpadCx;
+    dy = y - layout.dpadCy;
+    ax = dx < 0 ? -dx : dx;
+    ay = dy < 0 ? -dy : dy;
+    if (ax <= layout.dpadReach && ay <= layout.dpadReach)
+    {
+        int slop = layout.dpadReach / 5;
+
+        if (dx < -slop)
+            result |= DPAD_LEFT;
+        if (dx > slop)
+            result |= DPAD_RIGHT;
+        if (dy < -slop)
+            result |= DPAD_UP;
+        if (dy > slop)
+            result |= DPAD_DOWN;
     }
     return result;
 }
@@ -971,27 +1121,15 @@ static void RebuildTouchKeys(void)
 static void HandleTouchEvent(const SDL_TouchFingerEvent *finger, bool down)
 {
     int i, freeSlot = -1;
-    float x = finger->x, y = finger->y;
-    int logicalW = 0, logicalH = 0;
+    int ow = 0, oh = 0;
+    int x, y;
 
-    // Finger coordinates cover the whole Android window. When SDL keeps the
-    // game's aspect ratio, convert through its logical viewport so touch
-    // targets stay aligned with the controls even in the letterbox bars.
-    if (sdlRenderer != NULL && sdlWindow != NULL) {
-        SDL_RenderGetLogicalSize(sdlRenderer, &logicalW, &logicalH);
-        if (logicalW > 0 && logicalH > 0) {
-            int windowW = 0, windowH = 0;
-            float logicalX = 0.0f, logicalY = 0.0f;
-            SDL_GetWindowSize(sdlWindow, &windowW, &windowH);
-            if (windowW > 0 && windowH > 0) {
-                SDL_RenderWindowToLogical(sdlRenderer,
-                        (int)(finger->x * windowW), (int)(finger->y * windowH),
-                        &logicalX, &logicalY);
-                x = logicalX / logicalW;
-                y = logicalY / logicalH;
-            }
-        }
-    }
+    // SDL reports the finger as 0..1 of the window. Hit rectangles are in
+    // renderer output pixels, which match that span. Mapping through the
+    // logical game rect put every touch outside 0..1, so the buttons did nothing.
+    TouchOutputSize(&ow, &oh);
+    x = (int)(finger->x * ow);
+    y = (int)(finger->y * oh);
 
     for (i = 0; i < (int)(sizeof(sTouchPoints) / sizeof(sTouchPoints[0])); i++) {
         if (sTouchPoints[i].active && sTouchPoints[i].id == finger->fingerId) {
@@ -1068,61 +1206,42 @@ static void DrawTouchText(SDL_Renderer *renderer, const char *text, int centerX,
     }
 }
 
-static void DrawTouchControls(SDL_Renderer *renderer)
+static void DrawTouchControls(SDL_Renderer *renderer, const TouchLayout *layout)
 {
-    SDL_Rect r;
-    int w = 0, h = 0;
-    int unit, cx, cy, arm, span, button, startW, startH;
-    // SDL's logical size is normally the GBA-sized frame. Renderer drawing
-    // coordinates are transformed from that space to the physical display.
-    // Use logical dimensions when present so the controls remain visible and
-    // scale with the game image; use output pixels only in stretch mode.
-    SDL_RenderGetLogicalSize(renderer, &w, &h);
-    if (w <= 0 || h <= 0)
-        SDL_GetRendererOutputSize(renderer, &w, &h);
-    if (w <= 0 || h <= 0) {
-        w = gRenderWidth;
-        h = gRenderHeight;
-    }
-    unit = h < w ? h : w;
-    if (unit < 1) return;
+    SDL_Rect bar;
+    int thick = layout->dpadReach / 2;
 
-    // Draw in physical output pixels, not the 240x160 game framebuffer.
-    // This keeps the controls finger-sized on high-resolution phones.
-    cx = w * 16 / 100;
-    cy = h * 78 / 100;
-    arm = unit * 14 / 100;
-    span = unit * 42 / 100;
-    button = unit * 17 / 100;
-    startW = unit * 13 / 100;
-    startH = unit * 5 / 100;
-
+    if (thick < 4)
+        thick = 4;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 18, 24, 36, 185);
-    r = (SDL_Rect){ cx - arm / 2, cy - span / 2, arm, span }; SDL_RenderFillRect(renderer, &r);
-    r = (SDL_Rect){ cx - span / 2, cy - arm / 2, span, arm }; SDL_RenderFillRect(renderer, &r);
+    SDL_SetRenderDrawColor(renderer, 18, 24, 36, 210);
+    bar = (SDL_Rect){ layout->dpadCx - layout->dpadReach, layout->dpadCy - thick / 2,
+                      layout->dpadReach * 2, thick };
+    SDL_RenderFillRect(renderer, &bar);
+    bar = (SDL_Rect){ layout->dpadCx - thick / 2, layout->dpadCy - layout->dpadReach,
+                      thick, layout->dpadReach * 2 };
+    SDL_RenderFillRect(renderer, &bar);
 
-    // A and B targets align with TouchKeysAt's normalized hit regions.
-    SDL_SetRenderDrawColor(renderer, 35, 112, 74, 225);
-    r = (SDL_Rect){ w * 86 / 100 - button / 2, h * 79 / 100 - button / 2, button, button };
-    SDL_RenderFillRect(renderer, &r);
-    SDL_SetRenderDrawColor(renderer, 142, 58, 52, 225);
-    r = (SDL_Rect){ w * 70 / 100 - button / 2, h * 85 / 100 - button / 2, button, button };
-    SDL_RenderFillRect(renderer, &r);
+    SDL_SetRenderDrawColor(renderer, 48, 56, 72, 230);
+    SDL_RenderFillRect(renderer, &layout->l);
+    SDL_RenderFillRect(renderer, &layout->r);
+    SDL_SetRenderDrawColor(renderer, 35, 112, 74, 230);
+    SDL_RenderFillRect(renderer, &layout->a);
+    SDL_SetRenderDrawColor(renderer, 142, 58, 52, 230);
+    SDL_RenderFillRect(renderer, &layout->b);
+    SDL_SetRenderDrawColor(renderer, 30, 34, 44, 230);
+    SDL_RenderFillRect(renderer, &layout->selectBtn);
+    SDL_RenderFillRect(renderer, &layout->startBtn);
 
-    // Select and Start.
-    SDL_SetRenderDrawColor(renderer, 30, 34, 44, 225);
-    r = (SDL_Rect){ w * 44 / 100 - startW / 2, h * 91 / 100 - startH / 2, startW, startH };
-    SDL_RenderFillRect(renderer, &r);
-    r = (SDL_Rect){ w * 56 / 100 - startW / 2, h * 91 / 100 - startH / 2, startW, startH };
-    SDL_RenderFillRect(renderer, &r);
-
-    // Explicit labels make the on-screen controls identifiable at phone size.
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    DrawTouchText(renderer, "A", w * 86 / 100, h * 79 / 100, 2);
-    DrawTouchText(renderer, "B", w * 70 / 100, h * 85 / 100, 2);
-    DrawTouchText(renderer, "SEL", w * 44 / 100, h * 91 / 100, 1);
-    DrawTouchText(renderer, "START", w * 56 / 100, h * 91 / 100, 1);
+    DrawTouchText(renderer, "L", layout->l.x + layout->l.w / 2, layout->l.y + layout->l.h / 2, 2);
+    DrawTouchText(renderer, "R", layout->r.x + layout->r.w / 2, layout->r.y + layout->r.h / 2, 2);
+    DrawTouchText(renderer, "A", layout->a.x + layout->a.w / 2, layout->a.y + layout->a.h / 2, 2);
+    DrawTouchText(renderer, "B", layout->b.x + layout->b.w / 2, layout->b.y + layout->b.h / 2, 2);
+    DrawTouchText(renderer, "SEL", layout->selectBtn.x + layout->selectBtn.w / 2,
+                  layout->selectBtn.y + layout->selectBtn.h / 2, 1);
+    DrawTouchText(renderer, "START", layout->startBtn.x + layout->startBtn.w / 2,
+                  layout->startBtn.y + layout->startBtn.h / 2, 1);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 #endif
