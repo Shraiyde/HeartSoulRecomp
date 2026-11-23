@@ -44,6 +44,7 @@ prefabs.json
 *.sym
 *.js
 !lobby-directory/**/*.js
+!tools/lobby-worker/**/*.js
 /pokeemerald-*.png
 /pokefirered-*.png
 /pokeleafgreen-*.png
@@ -89,3 +90,7 @@ android/app/libs/
 /build/android/
 android/keystore/
 android/keystore.properties
+
+# Generated embedded ZeroTier Android AAR and external libzt checkout.
+android/app/libs/zerotier/
+third_party/libzt/

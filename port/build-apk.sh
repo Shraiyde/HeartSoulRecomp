@@ -11,6 +11,10 @@ for arg in "$@"; do
   [ "$arg" = "--asan" ] && ASAN=true
   [ "$arg" = "--release" ] && VARIANT=Release
 done
+if [ ! -f android/app/libs/zerotier/libzt-release.aar ]; then
+  echo "Embedded ZeroTier is missing. Run port/build-libzt-android.sh with LIBZT_SRC set to a recursive libzt checkout."
+  exit 1
+fi
 if [ "$1" = "--data" ] || [ ! -f build/android/game_data.o ]; then
   port/android-data.sh
 fi

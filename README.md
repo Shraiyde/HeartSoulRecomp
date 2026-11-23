@@ -30,6 +30,10 @@ Requirements: Android 8 or newer on an ARM device. The APK contains both a 64-bi
 - **Fast forward.** The right trigger (R2) fast-forwards. On the start screen pick HOLD (while held), TOGGLE (one pull on, the next off) or SMART (toggle, but menus run at normal speed so the cursor does not race).
 - **Controller support.** Built-in controls and gamepads work. The button labelled A is A.
 
+## Two-player co-op
+
+Choose **CO-OP** on the start screen, then **HOST A GAME** or **JOIN A GAME**. The host's phone runs the world and remains a player; the other phone connects directly to it over TCP. Android embeds a controller-less ZeroTier peer network: no separate ZeroTier app or account is needed. The host announces itself to the Heart & Soul lobby directory (`tools/lobby-worker/`), and **JOIN A GAME** lists those hosts. **JOIN PC HOST** in that same menu still joins the Windows World Host. The embedded library is under the ZeroTier BSL 1.1; see `LICENSES/ZeroTier-libzt-BSL-1.1.txt`.
+
 ## The bottom screen
 
 A status line (name, place, money, badges, play time, fast forward) and seven tabs:
@@ -181,3 +185,8 @@ Here is what AI has been used for:
 
 AI has not been used for:
 - Generating assets of any kind; Art or Music
+
+
+## Android touchscreen
+
+On phones, the game displays a touch D-pad, A and B, Start, and Select over the game picture. Hold a direction and press a face button at the same time for multi-touch input. The **BOTTOM SCREEN** button opens the companion interface on a single-display phone; **RETURN TO GAME** closes it.

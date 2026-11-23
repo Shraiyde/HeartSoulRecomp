@@ -22,16 +22,14 @@ import java.util.Locale;
 final class StartScreenView extends View {
     interface Listener {
         void onStartGame(Settings settings);
-        void onHostGame(Settings settings);
-        void onJoinGame(Settings settings);
         void onJoinPcHost(Settings settings);
     }
 
     // Design size in GBA pixels that the scale is chosen from.
     private static final int DESIGN_WIDTH = 256;
-    // 248 high holds the option rows plus HOST GAME, JOIN GAME, START GAME
-    // and the smaller JOIN PC HOST. The Thor still draws at 4x or 5x.
-    private static final int DESIGN_HEIGHT = 248;
+    // 210 high holds the four option rows with the margins; the Thor still
+    // draws at 5x and a 640x480 screen at 2x.
+    private static final int DESIGN_HEIGHT = 210;
     // The panels get no wider than this, in GBA pixels.
     private static final int MAX_CONTENT_WIDTH = 320;
 
@@ -44,9 +42,8 @@ final class StartScreenView extends View {
     private static final int ROW_SCALE = 1;
     private static final int ROW_BOTTOM = 2;
     private static final int ROW_FAST_FORWARD = 3;
-    private static final int ROW_PHONE = 4;
-    private static final int ROW_START = 5;
-    private static final int ROW_COUNT = 6;
+    private static final int ROW_START = 4;
+    private static final int ROW_COUNT = 5;
     private static final int OPTION_ROWS = 4;
 
     // The bottom screen's palette.
@@ -97,17 +94,11 @@ final class StartScreenView extends View {
     private final RectF[] rowRects = new RectF[ROW_COUNT];
     private final int[] valueLeft = new int[ROW_COUNT];
 
-    private int row = ROW_PHONE;
+    private int row = ROW_START;
     private int pressedRow = -1;
     private boolean started;
-    /** Left button of the phone row is HOST GAME. */
-    private boolean hostSelected = true;
-    /** Left button of the play row is START GAME. */
-    private boolean playSelected = true;
-    private String statusNote = "";
-    private final RectF hostRect = new RectF();
-    private final RectF gameJoinRect = new RectF();
-    private final RectF pcRect = new RectF();
+    private boolean joinSelected;
+    private final RectF joinRect = new RectF();
     /** The pixel scale of the current draw. */
     private int s = 1;
 
@@ -127,6 +118,7 @@ final class StartScreenView extends View {
         gba = GbaText.load(context.getAssets());
         setFocusable(true);
         setFocusableInTouchMode(true);
+        setClickable(true);
     }
 
     // ------------------------------------------------------------------
@@ -161,10 +153,9 @@ final class StartScreenView extends View {
         int optionRow = mainLine + 2 * PAD_Y * s;
         int optionsHeight = OPTION_ROWS * optionRow + 2 * (PAD_Y + 1) * s;
         int infoHeight = 2 * smallLine + 3 * PAD_Y * s + 2 * s;
-        int phoneHeight = mainLine + 2 * (PAD_Y + 1) * s + 2 * s;
         int startHeight = mainLine + 2 * (PAD_Y + 1) * s + 2 * s;
         int footerHeight = smallLine;
-        int total = titleHeight + optionsHeight + infoHeight + phoneHeight + startHeight + footerHeight + 5 * gap;
+        int total = titleHeight + optionsHeight + infoHeight + startHeight + footerHeight + 4 * gap;
 
         // Spare height goes around the block, so it sits in the middle.
         int top = Math.max(margin, (height - total) / 2);
@@ -175,8 +166,6 @@ final class StartScreenView extends View {
         top += optionsHeight + gap;
         drawInfo(canvas, left, top, right, top + infoHeight);
         top += infoHeight + gap;
-        drawPhoneButtons(canvas, left, top, right, top + phoneHeight);
-        top += phoneHeight + gap;
         drawStartButton(canvas, left, top, right, top + startHeight);
         top += startHeight + gap;
         drawFooter(canvas, left, top, right, top + footerHeight);
@@ -306,30 +295,17 @@ final class StartScreenView extends View {
         rect(canvas, x + 1, y + 1, x + w - 1, y + h - 1, COLOR_PICTURE);
     }
 
-    private void drawPhoneButtons(Canvas canvas, int left, int top, int right, int bottom) {
-        int gap = GAP * s;
-        int mid = (left + right) / 2;
-        int hostRight = mid - gap / 2;
-        int joinLeft = mid + gap / 2;
-        hostRect.set(left, top, hostRight, bottom);
-        gameJoinRect.set(joinLeft, top, right, bottom);
-        rowRects[ROW_PHONE].set(left, top, right, bottom);
-        drawActionButton(canvas, left, top, hostRight, bottom, "HOST GAME",
-                row == ROW_PHONE && hostSelected, pressedRow == -2);
-        drawActionButton(canvas, joinLeft, top, right, bottom, "JOIN GAME",
-                row == ROW_PHONE && !hostSelected, pressedRow == -3);
-    }
-
     private void drawStartButton(Canvas canvas, int left, int top, int right, int bottom) {
         int gap = GAP * s;
-        int startRight = left + (right - left) * 62 / 100;
-        int pcLeft = startRight + gap;
+        int mid = (left + right) / 2;
+        int startRight = mid - gap / 2;
+        int joinLeft = mid + gap / 2;
         rowRects[ROW_START].set(left, top, startRight, bottom);
-        pcRect.set(pcLeft, top, right, bottom);
+        joinRect.set(joinLeft, top, right, bottom);
         drawActionButton(canvas, left, top, startRight, bottom, "START GAME",
-                row == ROW_START && playSelected, pressedRow == ROW_START);
-        drawActionButton(canvas, pcLeft, top, right, bottom, "JOIN PC HOST",
-                row == ROW_START && !playSelected, pressedRow == -4);
+                row == ROW_START && !joinSelected, pressedRow == ROW_START);
+        drawActionButton(canvas, joinLeft, top, right, bottom, "CO-OP",
+                row == ROW_START && joinSelected, pressedRow == -2);
     }
 
     private void drawActionButton(Canvas canvas, int left, int top, int right, int bottom,
@@ -411,22 +387,11 @@ final class StartScreenView extends View {
                         break;
                 }
                 break;
-            case ROW_PHONE:
-                if (!statusNote.isEmpty()) {
-                    first = statusNote;
-                } else if (hostSelected) {
-                    first = "This phone hosts. The other phone taps JOIN GAME.";
-                } else {
-                    first = "Joins the game another phone is hosting. Nothing to type.";
-                }
-                break;
             default:
-                if (!statusNote.isEmpty()) {
-                    first = statusNote;
-                } else if (!playSelected) {
-                    first = "Joins the PC over ZeroTier. Nothing to type.";
+                if (joinSelected) {
+                    first = "HOST A GAME, JOIN A GAME, or JOIN PC HOST.";
                 } else {
-                    first = "Play on this phone. Changes apply when the game starts.";
+                    first = "Changes apply when the game starts.";
                 }
                 break;
         }
@@ -519,40 +484,12 @@ final class StartScreenView extends View {
         listener.onStartGame(settings);
     }
 
-    private void hostGame() {
-        if (started) {
-            return;
-        }
-        started = true;
-        listener.onHostGame(settings);
-    }
-
-    private void joinGame() {
-        if (started) {
-            return;
-        }
-        started = true;
-        listener.onJoinGame(settings);
-    }
-
     private void joinPcHost() {
         if (started) {
             return;
         }
         started = true;
         listener.onJoinPcHost(settings);
-    }
-
-    /** Shown in the info panel while a phone link is starting. */
-    void setStatus(String text) {
-        statusNote = text == null ? "" : text;
-        invalidate();
-    }
-
-    /** Lets the player try again after a phone link fails to start. */
-    void armAgain() {
-        started = false;
-        invalidate();
     }
 
     @Override
@@ -568,22 +505,16 @@ final class StartScreenView extends View {
                 invalidate();
                 return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                if (row == ROW_PHONE) {
-                    hostSelected = true;
-                    invalidate();
-                } else if (row == ROW_START) {
-                    playSelected = true;
+                if (row == ROW_START) {
+                    joinSelected = false;
                     invalidate();
                 } else {
                     change(-1);
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if (row == ROW_PHONE) {
-                    hostSelected = false;
-                    invalidate();
-                } else if (row == ROW_START) {
-                    playSelected = false;
+                if (row == ROW_START) {
+                    joinSelected = true;
                     invalidate();
                 } else {
                     change(1);
@@ -594,17 +525,11 @@ final class StartScreenView extends View {
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
                 if (!repeat) {
-                    if (row == ROW_PHONE) {
-                        if (hostSelected) {
-                            hostGame();
-                        } else {
-                            joinGame();
-                        }
-                    } else if (row == ROW_START) {
-                        if (playSelected) {
-                            start();
-                        } else {
+                    if (row == ROW_START) {
+                        if (joinSelected) {
                             joinPcHost();
+                        } else {
+                            start();
                         }
                     } else {
                         change(1);
@@ -627,6 +552,12 @@ final class StartScreenView extends View {
         }
     }
 
+    @Override
+    public boolean performClick() {
+        super.performClick();
+        return true;
+    }
+
     private int rowAt(float x, float y) {
         for (int i = 0; i < ROW_COUNT; i++) {
             if (rowRects[i].contains(x, y)) {
@@ -640,41 +571,27 @@ final class StartScreenView extends View {
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                if (hostRect.contains(event.getX(), event.getY())) {
+                if (joinRect.contains(event.getX(), event.getY())) {
                     pressedRow = -2;
-                    row = ROW_PHONE;
-                    hostSelected = true;
-                } else if (gameJoinRect.contains(event.getX(), event.getY())) {
-                    pressedRow = -3;
-                    row = ROW_PHONE;
-                    hostSelected = false;
-                } else if (pcRect.contains(event.getX(), event.getY())) {
-                    pressedRow = -4;
                     row = ROW_START;
-                    playSelected = false;
+                    joinSelected = true;
                 } else {
                     pressedRow = rowAt(event.getX(), event.getY());
                     if (pressedRow >= 0) {
                         row = pressedRow;
                         if (pressedRow == ROW_START) {
-                            playSelected = true;
+                            joinSelected = false;
                         }
                     }
                 }
                 invalidate();
                 return true;
             case MotionEvent.ACTION_UP: {
-                boolean hostTouch = hostRect.contains(event.getX(), event.getY());
-                boolean joinTouch = gameJoinRect.contains(event.getX(), event.getY());
-                boolean pcTouch = pcRect.contains(event.getX(), event.getY());
+                boolean joinTouch = joinRect.contains(event.getX(), event.getY());
                 int released = rowAt(event.getX(), event.getY());
                 int was = pressedRow;
                 pressedRow = -1;
-                if (hostTouch && was == -2) {
-                    hostGame();
-                } else if (joinTouch && was == -3) {
-                    joinGame();
-                } else if (pcTouch && was == -4) {
+                if (joinTouch && was == -2) {
                     joinPcHost();
                 } else if (released >= 0 && released == was) {
                     if (released == ROW_START) {

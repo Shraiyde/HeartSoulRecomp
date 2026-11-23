@@ -13,53 +13,77 @@ Rules for this log:
 
 ---
 
-## 2026-11-23, phone-to-phone co-op
+## 2026-11-23, merge phone host and own lobby
 
-State at end of session: not played on a phone. No emulator run. The Co-op
-APK workflow is a compile check only. It does not upload an APK and does
-not publish a release.
+State at end of session: `coop/direct-phone-host` is merged into `port`
+with a merge commit. Not played on a phone. No APK was uploaded.
 
 ### Done
 
-- HOST GAME and JOIN GAME are the main start-screen buttons. JOIN PC HOST
-  stays, smaller, and still sets `HNS_COOP_JOIN=1` for the baked PC host.
-- `src/platform/coop_host.c` listens on 127.0.0.1:27770 and speaks the
-  existing HELLO / READY / AES-GCM World Host framing. `HNS_COOP_HOST=1`
-  starts that listener and joins it as role 0. A joiner uses
-  `HNS_COOP_LOCAL_PORT` and still goes through `src/coop.c`. One resume
-  after a real drop is unchanged. `tools/HeartSoulCoopServer` is not in
-  this tree and was not added or edited.
-- `HeartSoulLink` carries TCP over a controller-less ZeroTier ad-hoc
-  network whose id comes from libzt's `zts_net_compute_adhoc_id` for port
-  27770. Host bridge: ZeroTier :27770 to 127.0.0.1:27770. Joiner bridge:
-  127.0.0.1:ephemeral to the host's ZeroTier IPv6 :27770.
-- `port/build-libzt-android.sh` fetches libzt 1.8.10 (Business Source
-  License 1.1), patches the Android `select()` limit, and writes
-  `android/app/libs/libzt-release.aar`. The source and the archive stay
-  out of git. README names the license.
-- `lobby-directory/` is our Cloudflare Worker. Hosts POST every 30 seconds.
-  A joiner GETs the list and, when one host is listed, joins it. Several
-  hosts: the newest. The URL and `HNS_LOBBY_KEY` are build settings and
-  are empty until the worker is deployed. The secret is not printed.
-- Leaving the app flushes the bridge and sends a background notice. The
-  other phone keeps the session and the partner sprite for 90 seconds
-  instead of treating the silence as a drop. TCP keepalive on the phone
-  path is 15s idle, 5s interval, 9 probes, 90s user timeout.
-
-### Blocked
-
-- Two phones cannot find each other until `lobby-directory` is deployed
-  and the APK is built with `hns.lobbyUrl` and `hns.lobbyKey`. HOST GAME
-  still brings the node and the in-process host up without that URL.
-- libzt 1.8.10 has not been compiled in this session. The next CI run is
-  the first time `port/build-libzt-android.sh` runs here.
+- Merge kept the phone host and joiner from `coop/direct-phone-host`
+  (`ae2d14f8`) and the PC-host client from `13a91a0a18`. Phone sessions
+  use `HNS_COOP_MODE`. **JOIN PC HOST** sets `HNS_COOP_JOIN=1` and does
+  not start the phone bridge.
+- Deleted `android/app/src/main/assets/lobby_server.txt`. The PokeWilds
+  directory URL is no longer in the tree tip. The old commit that added
+  it is still in history. `CoopLobby` reads `BuildConfig.LOBBY_URL` and
+  `BuildConfig.LOBBY_KEY`, filled from `HNS_LOBBY_URL` / `HNS_LOBBY_KEY`
+  at build time. Those values are not committed and are not logged.
+- `tools/lobby-worker/` is the directory. POST and GET `/v1/lobbies`,
+  DELETE or POST `{remove:true}` on exit, 90 second expiry, header
+  `X-HeartSoul-Key`.
+- `CheckTogepi` uses `FLAG_RECEIVED_TOGEPI_EGG` only when `IS_HNS`.
+  FireRed, LeafGreen, and Emerald keep the species check without that flag.
 
 ### Next
 
-- Watch the Co-op APK workflow. It must compile and must not upload an APK.
-- Stephen deploys `lobby-directory` and sets the URL and `HNS_LOBBY_KEY`
-  when he wants JOIN GAME to see hosts.
-- No phone test until he asks. No new release tag.
+- Deploy `tools/lobby-worker/` and set `HNS_LOBBY_URL` plus `HNS_LOBBY_KEY`
+  before expecting JOIN A GAME to list hosts. Steps are in
+  `tools/lobby-worker/README.md`.
+- CI may compile. Do not publish an APK. Stephen plays on the Thor before
+  any release.
+
+---
+
+## 2026-11-22, embedded ZeroTier phone-to-phone co-op
+
+State at end of session: implementation is on branch `coop/direct-phone-host`.
+It has **not** been compiled or tested on Android devices yet. Do not call it
+working until the Android build and two-phone connection have both passed.
+
+### Done
+
+- Replaced the baked PC World Host with a phone-hosted TCP listener on port
+  54555. The hosting phone is role 0 and runs the world; the joining phone is
+  role 1. Existing shared-world flags, variables, positions, lead Pokémon,
+  readiness sync, and battle-abort behavior remain in `src/coop.c`.
+- Adapted the embedded ZeroTier Android bridge from PokeWilds Mobile. Both
+  phones join the same controller-less ad-hoc network derived from port 54555.
+  The host forwards ZeroTier TCP to its local game listener; the guest opens
+  a loopback forwarder to the host's IPv6 address. No lobby directory or
+  dedicated game server is added.
+- Added HOST A GAME / JOIN A GAME to the Android CO-OP menu. The host shares
+  its ZeroTier IPv6 address; the guest enters that address directly.
+- Added the libzt Android AAR build script, source patches, Gradle dependency,
+  CI build step, and the ZeroTier BSL 1.1 notice.
+- Removed the hard-coded ZeroTier World Host endpoint. The native game socket
+  now binds only to loopback; peer traffic reaches it through the embedded
+  ZeroTier bridge.
+
+### Not yet verified
+
+- Android NDK/Gradle compilation with the newly built libzt AAR.
+- Two-phone connection, reconnect behavior, and shared trainer battles.
+- ZeroTier's peer path can use relay fallback when direct traversal fails;
+  this is the same embedded peer-network approach as PokeWilds Mobile.
+
+### Next
+
+1. Run the Android CI build with libzt and fix build errors.
+2. Test two phones joining the ad-hoc network and exchanging TCP data.
+3. Test the full co-op flow on the same map and during shared trainer battles.
+4. Only then mark co-op as working or publish an APK.
+
 
 ---
 

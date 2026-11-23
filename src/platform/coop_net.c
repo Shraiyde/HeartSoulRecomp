@@ -4,12 +4,7 @@
 #define _GNU_SOURCE
 #include "platform/coop_net.h"
 #include "platform/coop_aes.h"
-#include "platform/coop_host.h"
 #include "platform/coop_secret.h"
-
-#ifdef __ANDROID__
-#include <jni.h>
-#endif
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -62,12 +57,9 @@ static int sInRead;
 static int sInWrite;
 static int sInCount;
 static uint8_t sSessionKey[32];
+static bool sPcSession;
 static bool sHaveKey;
 static char sClientId[20];
-static int sPhoneLink;
-static bool sBackground;
-static volatile bool sForceFlush;
-static int sSessionFd = -1;
 
 static uint64_t CoopNowMs(void)
 {
@@ -325,9 +317,8 @@ static void HandlePlain(const uint8_t *plain, size_t len)
     }
 }
 
-static bool DecodeEncrypted(const uint8_t *wire, size_t wireLen)
+static bool DecodeEncrypted(const uint8_t *wire, size_t wireLen, int expectedSender)
 {
-    uint8_t nonce[12];
     uint8_t plain[COOP_MAX_FRAME];
     uint32_t sender;
     uint64_t counter;
@@ -338,8 +329,7 @@ static bool DecodeEncrypted(const uint8_t *wire, size_t wireLen)
         return true;
     sender = LoadBe32(wire);
     counter = LoadBe64(wire + 4);
-    /* Phones only apply frames the World Host stamped. */
-    if (sender != 2)
+    if (sender != (uint32_t)expectedSender)
         return true;
     pthread_mutex_lock(&sMu);
     if (counter <= sRecvCounter)
@@ -352,8 +342,6 @@ static bool DecodeEncrypted(const uint8_t *wire, size_t wireLen)
     tag = wire + 12 + cipherLen;
     if (CoopAesGcmDecrypt(sSessionKey, wire, wire + 12, cipherLen, tag, plain) != 0)
         return true;
-    memcpy(nonce, wire, 12);
-    (void)nonce;
     pthread_mutex_lock(&sMu);
     if (counter > sRecvCounter)
         sRecvCounter = counter;
@@ -407,7 +395,7 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq)
     }
 }
 
-static bool ReadLine(int fd, char *out, size_t cap, uint64_t limitMs)
+static bool ReadLine(int fd, char *out, size_t cap)
 {
     size_t n = 0;
     uint64_t start = CoopNowMs();
@@ -415,7 +403,7 @@ static bool ReadLine(int fd, char *out, size_t cap, uint64_t limitMs)
     {
         uint8_t b;
         ssize_t r;
-        if (CoopNowMs() - start > limitMs)
+        if (CoopNowMs() - start > 8000)
             return false;
         r = recv(fd, &b, 1, 0);
         if (r < 0)
@@ -447,38 +435,12 @@ static bool ReadLine(int fd, char *out, size_t cap, uint64_t limitMs)
     return false;
 }
 
-static void TuneSocket(int fd, bool phone)
-{
-    int on = 1;
-    int idle = phone ? 15 : 30;
-    int interval = 5;
-    int count = phone ? 9 : 3;
-    int userMs = phone ? 90000 : 20000;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-    setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
-#ifdef TCP_KEEPIDLE
-    setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
-#endif
-#ifdef TCP_KEEPINTVL
-    setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
-#endif
-#ifdef TCP_KEEPCNT
-    setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
-#endif
-#ifdef TCP_USER_TIMEOUT
-    setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &userMs, sizeof(userMs));
-#endif
-    (void)idle;
-    (void)interval;
-    (void)count;
-    (void)userMs;
-}
-
-static int TcpConnect(const char *host, int port, int waitMs)
+static int TcpConnect(const char *host, int port)
 {
     int fd;
     struct sockaddr_in addr;
     int flags;
+    int on = 1;
     int rc;
 
     memset(&addr, 0, sizeof(addr));
@@ -489,7 +451,14 @@ static int TcpConnect(const char *host, int port, int waitMs)
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
         return -1;
-    TuneSocket(fd, sPhoneLink != 0);
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+    setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+#ifdef TCP_USER_TIMEOUT
+    {
+        int ms = 20000;
+        setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &ms, sizeof(ms));
+    }
+#endif
     flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
@@ -506,7 +475,7 @@ static int TcpConnect(const char *host, int port, int waitMs)
         pfd.fd = fd;
         pfd.events = POLLOUT;
         pfd.revents = 0;
-        if (poll(&pfd, 1, waitMs) <= 0)
+        if (poll(&pfd, 1, 8000) <= 0)
         {
             close(fd);
             return -1;
@@ -517,6 +486,29 @@ static int TcpConnect(const char *host, int port, int waitMs)
             return -1;
         }
     }
+    return fd;
+}
+
+static int TcpListen(int port)
+{
+    int fd;
+    int on = 1;
+    struct sockaddr_in addr;
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    /* The embedded ZeroTier bridge forwards peers into this loopback socket. */
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons((uint16_t)port);
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 || listen(fd, 1) < 0)
+    {
+        close(fd);
+        return -1;
+    }
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
     return fd;
 }
 
@@ -560,20 +552,23 @@ static bool PrepareKey(void)
 {
     uint8_t secret[32];
     CoopSecretShared(secret);
-    CoopHmacSha256(secret, sizeof(secret), (const uint8_t *)"HNS-ZT-SESSION-V1", 16, sSessionKey);
+    if (sPcSession)
+        CoopHmacSha256(secret, sizeof(secret), (const uint8_t *)"HNS-ZT-SESSION-V1", 16, sSessionKey);
+    else
+        CoopHmacSha256(secret, sizeof(secret), (const uint8_t *)"HNS-DIRECT-SESSION-V1", 21, sSessionKey);
     memset(secret, 0, sizeof(secret));
     sHaveKey = true;
     return true;
 }
 
-static bool HelloProof(char *out, size_t cap)
+static bool HelloProofForId(const char *clientId, char *out, size_t cap)
 {
     uint8_t secret[32];
     uint8_t mac[32];
     char msg[64];
     int n;
     CoopSecretShared(secret);
-    n = snprintf(msg, sizeof(msg), "hello|%s", sClientId);
+    n = snprintf(msg, sizeof(msg), "hello|%s", clientId);
     if (n <= 0 || (size_t)n >= sizeof(msg))
     {
         memset(secret, 0, sizeof(secret));
@@ -585,7 +580,36 @@ static bool HelloProof(char *out, size_t cap)
     return CoopBase64Encode(mac, 32, out, cap) > 0;
 }
 
-static void RunSession(int fd)
+static bool VerifyHello(const char *line)
+{
+    char clientId[20];
+    char proof[80];
+    char expected[80];
+    if (sscanf(line, "HELLO %19s %79s", clientId, proof) != 2)
+        return false;
+    if (strlen(clientId) < 8 || !HelloProofForId(clientId, expected, sizeof(expected)))
+        return false;
+    return strcmp(proof, expected) == 0;
+}
+
+/* Both devices run the same encrypted, framed peer protocol. The phone that
+ * opened the listening socket is role 0; the joining phone is role 1. */
+static uint64_t RandomCounter(void)
+{
+    uint64_t value = 0;
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f != NULL)
+    {
+        if (fread(&value, 1, sizeof(value), f) != sizeof(value))
+            value = 0;
+        fclose(f);
+    }
+    if (value == 0)
+        value = (CoopNowMs() << 16) ^ (uint64_t)getpid();
+    return value | 1ull;
+}
+
+static void RunSession(int fd, int localRole, bool isHost)
 {
     char line[160];
     char proof[80];
@@ -593,51 +617,75 @@ static void RunSession(int fd)
     uint8_t acc[COOP_MAX_FRAME + 8];
     size_t have = 0;
     uint32_t seq = 1;
-    int sender;
+    int remoteRole = sPcSession ? 2 : (localRole == 0 ? 1 : 0);
     uint64_t lastPos = 0;
 
-    if (!HelloProof(proof, sizeof(proof)))
+    if (isHost)
     {
-        close(fd);
-        return;
+        if (!ReadLine(fd, line, sizeof(line)) || !VerifyHello(line)
+            || !SendAll(fd, (const uint8_t *)"READY 1\n", 8))
+        {
+            close(fd);
+            return;
+        }
     }
-    snprintf(hello, sizeof(hello), "HELLO %s %s\n", sClientId, proof);
-    memset(proof, 0, sizeof(proof));
-    if (!SendAll(fd, (const uint8_t *)hello, strlen(hello)))
+    else
     {
+        if (!HelloProofForId(sClientId, proof, sizeof(proof)))
+        {
+            close(fd);
+            return;
+        }
+        snprintf(hello, sizeof(hello), "HELLO %s %s\n", sClientId, proof);
+        memset(proof, 0, sizeof(proof));
+        if (!SendAll(fd, (const uint8_t *)hello, strlen(hello)))
+        {
+            memset(hello, 0, sizeof(hello));
+            close(fd);
+            return;
+        }
         memset(hello, 0, sizeof(hello));
-        close(fd);
-        return;
+        if (!ReadLine(fd, line, sizeof(line)))
+        {
+            fprintf(stderr, "co-op: host rejected the join\n");
+            close(fd);
+            return;
+        }
+        if (sPcSession)
+        {
+            if (strncmp(line, "FULL", 4) == 0)
+            {
+                fprintf(stderr, "co-op: PC host is full\n");
+                sWant = false;
+                close(fd);
+                return;
+            }
+            if (strncmp(line, "READY ", 6) != 0)
+            {
+                fprintf(stderr, "co-op: PC host rejected the join\n");
+                close(fd);
+                return;
+            }
+            localRole = atoi(line + 6);
+            if (localRole != 0 && localRole != 1)
+                localRole = 0;
+        }
+        else if (strcmp(line, "READY 1") != 0)
+        {
+            fprintf(stderr, "co-op: host rejected the join\n");
+            close(fd);
+            return;
+        }
     }
-    memset(hello, 0, sizeof(hello));
-    if (!ReadLine(fd, line, sizeof(line), sPhoneLink ? 20000 : 8000))
-    {
-        close(fd);
-        return;
-    }
-    if (strncmp(line, "FULL", 4) == 0)
-    {
-        fprintf(stderr, "co-op: PC host is full\n");
-        sWant = false;
-        close(fd);
-        return;
-    }
-    if (strncmp(line, "READY ", 6) != 0)
-    {
-        fprintf(stderr, "co-op: PC host rejected the join\n");
-        close(fd);
-        return;
-    }
-    sender = atoi(line + 6);
-    if (sender != 0 && sender != 1)
-        sender = 0;
+
     pthread_mutex_lock(&sMu);
-    sRole = sender;
+    sRole = localRole;
     sLinkUp = true;
     sEverUp = true;
-    sSessionFd = fd;
+    sSendCounter = RandomCounter();
+    sRecvCounter = 0;
     pthread_mutex_unlock(&sMu);
-    fprintf(stderr, "co-op: joined host\n");
+    fprintf(stderr, "co-op: direct phone link up (role %d)\n", localRole);
 
     while (sWant)
     {
@@ -647,39 +695,25 @@ static void RunSession(int fd)
         while (have >= 4)
         {
             uint32_t len = LoadBe32(acc);
-            if (len < 16 || len > COOP_MAX_FRAME)
+            if (len < 28 || len > COOP_MAX_FRAME)
             {
                 have = 0;
                 goto down;
             }
             if (have < 4 + len)
                 break;
-            DecodeEncrypted(acc + 4, len);
+            DecodeEncrypted(acc + 4, len, remoteRole);
             memmove(acc, acc + 4 + len, have - 4 - len);
             have -= 4 + len;
-        }
-        if (sForceFlush)
-        {
-            sForceFlush = false;
-#ifdef TCP_USER_TIMEOUT
-            if (sBackground)
-            {
-                int userMs = 120000;
-                setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &userMs, sizeof(userMs));
-            }
-#endif
-            FlushOutbound(fd, sender, &seq);
-            lastPos = CoopNowMs();
         }
         now = CoopNowMs();
         if (lastPos == 0 || now - lastPos >= 400)
         {
-            FlushOutbound(fd, sender, &seq);
+            FlushOutbound(fd, localRole, &seq);
             lastPos = now;
         }
         else
         {
-            /* Still drain a few story words between position beats. */
             int guard;
             for (guard = 0; guard < 4; guard++)
             {
@@ -690,124 +724,125 @@ static void RunSession(int fd)
                 pthread_mutex_unlock(&sMu);
                 if (!got)
                     break;
-                if (!BuildAndSend(fd, sender, item.type, item.bytes, item.len, ++seq))
+                if (!BuildAndSend(fd, localRole, item.type, item.bytes, item.len, ++seq))
                     goto down;
             }
         }
     }
 down:
-    pthread_mutex_lock(&sMu);
-    if (sSessionFd == fd)
-        sSessionFd = -1;
-    pthread_mutex_unlock(&sMu);
     NoteLink(false);
     close(fd);
-    fprintf(stderr, "co-op: host link down\n");
-}
-
-static void ChooseEndpoint(char *host, size_t hostCap, int *port)
-{
-    const char *asHost = getenv("HNS_COOP_HOST");
-    const char *localPort = getenv("HNS_COOP_LOCAL_PORT");
-    sPhoneLink = 0;
-    if (asHost != NULL && asHost[0] == '1')
-    {
-        int spins = 0;
-        CoopHost_Start();
-        while (!CoopHost_Listening() && spins < 50)
-        {
-            usleep(100 * 1000);
-            spins++;
-        }
-        snprintf(host, hostCap, "127.0.0.1");
-        *port = 27770;
-        sPhoneLink = 1;
-        return;
-    }
-    if (localPort != NULL && localPort[0] != '\0')
-    {
-        snprintf(host, hostCap, "127.0.0.1");
-        *port = atoi(localPort);
-        sPhoneLink = 1;
-        return;
-    }
-    CoopSecretHost(host);
-    *port = CoopSecretPort();
+    fprintf(stderr, "co-op: direct phone link down\n");
 }
 
 static void *ThreadMain(void *unused)
 {
-    char host[64];
-    int port;
-    int waitMs;
+    const char *mode = getenv("HNS_COOP_MODE");
+    const char *address = getenv("HNS_COOP_ADDRESS");
+    const char *portText = getenv("HNS_COOP_PORT");
+    const char *pcJoin = getenv("HNS_COOP_JOIN");
+    char pcHost[16];
+    int port = portText != NULL && portText[0] != '\0' ? atoi(portText) : 54555;
+    bool hostMode = mode != NULL && strcmp(mode, "host") == 0;
+    bool joinMode = mode != NULL && strcmp(mode, "join") == 0;
+    sPcSession = pcJoin != NULL && pcJoin[0] == '1' && !hostMode && !joinMode;
+    if (sPcSession)
+    {
+        CoopSecretHost(pcHost);
+        address = pcHost;
+        port = CoopSecretPort();
+    }
     (void)unused;
     signal(SIGPIPE, SIG_IGN);
-    ChooseEndpoint(host, sizeof(host), &port);
-    waitMs = sPhoneLink ? 20000 : 8000;
     PrepareKey();
     LoadOrCreateClientId();
 
-    while (sWant)
+    if (port < 1 || port > 65535)
     {
-        int fd = TcpConnect(host, port, waitMs);
-        if (fd < 0)
+        fprintf(stderr, "co-op: invalid TCP port\n");
+        return NULL;
+    }
+
+    if (hostMode)
+    {
+        int listener = TcpListen(port);
+        if (listener < 0)
         {
-            if (sEverUp)
+            fprintf(stderr, "co-op: could not listen on TCP port %d\n", port);
+            return NULL;
+        }
+        fprintf(stderr, "co-op: hosting direct phone session on TCP port %d\n", port);
+        while (sWant)
+        {
+            struct pollfd pfd;
+            int fd;
+            pfd.fd = listener;
+            pfd.events = POLLIN;
+            pfd.revents = 0;
+            if (poll(&pfd, 1, 500) <= 0)
+                continue;
+            fd = accept(listener, NULL, NULL);
+            if (fd < 0)
             {
-                /* One resume of the same session, then stop. */
-                sResumeSpent = true;
+                if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+                    continue;
                 break;
             }
-            /* First join: a short wait, then one more try, then stop.
-             * No popup and no reconnect loop. */
-            usleep(1500 * 1000);
-            fd = TcpConnect(host, port, waitMs);
-            if (fd < 0)
-                break;
+            {
+                int flags = fcntl(fd, F_GETFL, 0);
+                fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+            }
+            RunSession(fd, 0, true);
         }
-        RunSession(fd);
-        if (!sWant)
-            break;
-        if (!sEverUp)
-            break;
-        if (sResumeSpent)
-            break;
-        sResumeSpent = true;
-        fprintf(stderr, "co-op: resuming host session\n");
-        usleep(400 * 1000);
+        close(listener);
+    }
+    else
+    {
+        int attempt;
+        if (address == NULL || address[0] == '\0')
+        {
+            fprintf(stderr, "co-op: join address is missing\n");
+            return NULL;
+        }
+        for (attempt = 0; attempt < 2 && sWant; attempt++)
+        {
+            int fd = TcpConnect(address, port);
+            if (fd < 0)
+            {
+                if (attempt == 0)
+                    usleep(1500 * 1000);
+                continue;
+            }
+            RunSession(fd, 1, false);
+            if (!sWant || !sEverUp)
+                break;
+            if (sResumeSpent)
+                break;
+            sResumeSpent = true;
+            usleep(400 * 1000);
+        }
     }
     NoteLink(false);
-    memset(host, 0, sizeof(host));
     return NULL;
 }
 
 void CoopNet_SetBackgrounded(bool background)
 {
-    pthread_mutex_lock(&sMu);
-    sBackground = background;
-    sForceFlush = true;
-    pthread_mutex_unlock(&sMu);
-    CoopNet_SendWord(COOP_MSG_WORLD_READY, background ? COOP_READY_BACKGROUND : COOP_READY_FOREGROUND);
+    (void)background;
 }
 
 bool CoopNet_IsBackgrounded(void)
 {
-    bool background;
-    pthread_mutex_lock(&sMu);
-    background = sBackground;
-    pthread_mutex_unlock(&sMu);
-    return background;
+    return false;
 }
 
 void CoopNet_Boot(void)
 {
-    const char *join = getenv("HNS_COOP_JOIN");
-    const char *asHost = getenv("HNS_COOP_HOST");
-    const char *localPort = getenv("HNS_COOP_LOCAL_PORT");
-    bool armed = (join != NULL && join[0] == '1')
-        || (asHost != NULL && asHost[0] == '1')
-        || (localPort != NULL && localPort[0] != '\0');
-    if (!armed)
+    const char *mode = getenv("HNS_COOP_MODE");
+    const char *pcJoin = getenv("HNS_COOP_JOIN");
+    bool phone = mode != NULL && (strcmp(mode, "host") == 0 || strcmp(mode, "join") == 0);
+    bool pc = pcJoin != NULL && pcJoin[0] == '1';
+    if (!phone && !pc)
         return;
     if (sThreadStarted)
         return;
@@ -938,16 +973,6 @@ bool CoopNet_Poll(uint16_t *type, uint8_t *payload, uint32_t *len, uint32_t cap)
     }
     return true;
 }
-
-#ifdef __ANDROID__
-JNIEXPORT void JNICALL
-Java_com_heartsoul_recomp_HeartSoulActivity_nativeCoopBackground(JNIEnv *env, jobject thiz, jboolean background)
-{
-    (void)env;
-    (void)thiz;
-    CoopNet_SetBackgrounded(background == JNI_TRUE);
-}
-#endif
 
 #else
 

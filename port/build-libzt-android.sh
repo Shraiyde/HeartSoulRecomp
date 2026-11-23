@@ -1,39 +1,66 @@
-#!/bin/sh
-# Builds the libzt Android archive the game links against.
-# libzt is Business Source License 1.1. This script fetches that source; it is
-# not stored in this repository. The archive is written to
-# android/app/libs/libzt-release.aar and is not committed.
-set -eu
-cd "$(dirname "$0")/.."
-OUT="android/app/libs/libzt-release.aar"
-if [ -f "$OUT" ] && [ "${LIBZT_REBUILD:-}" != 1 ]; then
-  echo "libzt archive already present"
-  exit 0
-fi
-: "${ANDROID_HOME:?Set ANDROID_HOME to the Android SDK}"
-NDK_VERSION="${NDK_VERSION:-27.2.12479018}"
-if [ ! -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]; then
-  echo "Install NDK $NDK_VERSION before building libzt"
-  exit 1
-fi
-WORK="${LIBZT_WORK:-${TMPDIR:-/tmp}/heartsoul-libzt}"
-rm -rf "$WORK"
-mkdir -p "$WORK"
-git clone --depth 1 --branch 1.8.10 https://github.com/zerotier/libzt.git "$WORK/src"
-git -C "$WORK/src" submodule update --init --recursive --depth 1
-python3 port/patch-libzt.py "$WORK/src"
-rm -rf "$WORK/src/hns-aar"
-cp -a port/libzt-android "$WORK/src/hns-aar"
-mkdir -p "$WORK/src/hns-aar/gradle/wrapper"
-cp android/gradlew "$WORK/src/hns-aar/gradlew"
-cp android/gradle/wrapper/gradle-wrapper.jar "$WORK/src/hns-aar/gradle/wrapper/gradle-wrapper.jar"
-cp android/gradle/wrapper/gradle-wrapper.properties "$WORK/src/hns-aar/gradle/wrapper/gradle-wrapper.properties"
-chmod +x "$WORK/src/hns-aar/gradlew"
-printf 'sdk.dir=%s\nndk.dir=%s\n' "$ANDROID_HOME" "$ANDROID_HOME/ndk/$NDK_VERSION" > "$WORK/src/hns-aar/local.properties"
-(
-  cd "$WORK/src/hns-aar"
-  ./gradlew --no-daemon assembleRelease
-)
-mkdir -p android/app/libs
-cp "$WORK/src/hns-aar/app/build/outputs/aar/"*.aar "$OUT"
-echo "Built $OUT"
+#!/bin/bash
+# Builds libzt (the embeddable ZeroTier node) for Android and puts the AAR
+# where the game's Gradle export picks it up:
+#   android/app/libs/zerotier/libzt-release.aar
+#
+# Needs: JDK 17, Android SDK with the NDK and CMake packages below, and the
+# libzt source with its submodules (git clone --recursive
+# https://github.com/zerotier/libzt). Run once; rerun only to update libzt.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+LIBZT_SRC="${LIBZT_SRC:-$HERE/../third_party/libzt}"
+# Build outside the source drive: exFAT/FAT volumes break Gradle and CMake.
+WORK="${LIBZT_WORK:-$HOME/.cache/heartsoul-libzt}"
+OUT="$HERE/../android/app/libs/zerotier"
+NDK_VERSION="${NDK_VERSION:-29.0.14206865}"   # same NDK the Godot export uses
+CMAKE_VERSION="${CMAKE_VERSION:-3.22.1}"
+
+: "${ANDROID_HOME:?Set ANDROID_HOME to your Android SDK folder}"
+[ -f "$LIBZT_SRC/ext/ZeroTierOne/node/Node.cpp" ] || {
+    echo "libzt submodules are missing in $LIBZT_SRC (git submodule update --init)"; exit 1; }
+[ -d "$ANDROID_HOME/ndk/$NDK_VERSION" ] || {
+    echo "Install NDK $NDK_VERSION: sdkmanager \"ndk;$NDK_VERSION\" \"cmake;$CMAKE_VERSION\""; exit 1; }
+
+mkdir -p "$WORK" "$OUT"
+rsync -a --delete --exclude '.git' --exclude '._*' --exclude 'cache' --exclude 'dist' "$LIBZT_SRC/" "$WORK/"
+
+python3 "$HERE/libzt_patches.py" "$WORK"
+
+GRADLE="$WORK/pkg/android/app/build.gradle"
+# Only the two ABIs the game exports, built with the game's NDK.
+sed -i.bak \
+    -e 's/abiFilters .*/abiFilters "armeabi-v7a", "arm64-v8a"/' \
+    -e "s/ndkVersion '.*'/ndkVersion '$NDK_VERSION'/" \
+    -e "s/version '3\\.22\\.1'/version '$CMAKE_VERSION'/" \
+    "$GRADLE"
+
+# Maven Central (repo.maven.apache.org) was unreachable from CI: AGP's
+# transitive deps (asm, fastutil, ...) all failed there while Google's
+# mirror worked. Add Google's Maven Central mirror ahead of mavenCentral()
+# in the root build.gradle so the build never depends on that host alone.
+ROOT_GRADLE="$WORK/pkg/android/build.gradle"
+python3 - "$ROOT_GRADLE" <<'PYEOF'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+mirror = "        maven { url 'https://maven-central.storage-download.googleapis.com/maven2' }"
+n = s.count("        mavenCentral()")
+if n == 0:
+    print("mirror patch: mavenCentral() not found in " + p, file=sys.stderr)
+    sys.exit(1)
+s = s.replace("        mavenCentral()", mirror + "\n        mavenCentral()")
+open(p, "w").write(s)
+PYEOF
+
+cd "$WORK/pkg/android"
+chmod +x gradlew
+attempt=1
+until ./gradlew --no-daemon assembleRelease; do
+  if [ "$attempt" -ge 3 ]; then echo "libzt Gradle build failed after 3 attempts"; exit 1; fi
+  echo "libzt Gradle build attempt $attempt failed; retrying in 30s..."
+  sleep 30
+  attempt=$((attempt + 1))
+done
+cp app/build/outputs/aar/libzt-release.aar "$OUT/libzt-release.aar"
+echo "Built $OUT/libzt-release.aar"

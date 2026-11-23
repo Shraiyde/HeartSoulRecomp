@@ -37,9 +37,8 @@ struct CoopRemoteView
     uint32_t ageMs;
 };
 
-/* Start the link. HNS_COOP_HOST=1 listens on this phone and joins it.
- * HNS_COOP_JOIN=1 with HNS_COOP_LOCAL_PORT joins another phone through
- * the local bridge. HNS_COOP_JOIN=1 alone still joins the PC host. */
+/* HNS_COOP_MODE host/join is the phone session. HNS_COOP_JOIN=1, with no
+ * phone mode, joins the Windows PC host instead. */
 void CoopNet_Boot(void);
 void CoopNet_SetBackgrounded(bool background);
 bool CoopNet_IsBackgrounded(void);

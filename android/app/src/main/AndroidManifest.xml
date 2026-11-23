@@ -25,7 +25,7 @@
             android:exported="true"
             android:noHistory="true"
             android:excludeFromRecents="true"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="fullSensor"
             android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -39,7 +39,7 @@
             android:exported="true"
             android:alwaysRetainTaskState="true"
             android:launchMode="singleInstance"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="fullSensor"
             android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />
 
         <!-- The companion screen on a second display that takes no Presentation. -->

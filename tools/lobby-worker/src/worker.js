@@ -1,6 +1,5 @@
-// Cloudflare Worker. One Durable Object holds the host list.
-// Set the secret LOBBY_KEY with `wrangler secret put LOBBY_KEY`. Until that
-// secret exists the list is open. Do not print the secret.
+// One Durable Object holds the host list.
+// Set LOBBY_KEY with `npx wrangler secret put LOBBY_KEY`. Do not print it.
 import { Directory } from "./directory.js";
 
 const reply = (status, body) => new Response(JSON.stringify(body), {
@@ -33,7 +32,7 @@ export class HostDirectory {
         const body = request.method === "GET" ? "" : await request.text();
         const result = await this.directory.handle(request.method, url.pathname, body);
         if (result.saved) {
-            await this.storage.put(result.saved.id, { address: result.saved.address, seen: result.saved.seen });
+            await this.storage.put(result.saved.id, result.saved.record);
         }
         if (result.removed && result.removed.length) {
             await this.storage.delete(result.removed);

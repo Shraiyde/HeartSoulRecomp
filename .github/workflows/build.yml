@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -8,6 +12,9 @@ on:
   pull_request:
 
 env:
+  # Use the GNU ARM Embedded toolchain installed by each job. Without this
+  # prefix, the build picks the host assembler and rejects -mcpu=arm7tdmi.
+  PREFIX: arm-none-eabi-
   GAME_REVISION: 0
   GAME_LANGUAGE: ENGLISH
   COMPARE: 0
@@ -17,7 +24,7 @@ env:
 jobs:
   build-emerald:
     if: github.actor != 'allcontributors[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,7 +61,7 @@ jobs:
 
   build-firered:
     if: github.actor != 'allcontributors[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -89,7 +96,7 @@ jobs:
 
   build-leafgreen:
     if: github.actor != 'allcontributors[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -124,7 +131,7 @@ jobs:
 
   release:
     if: github.actor != 'allcontributors[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -161,7 +168,7 @@ jobs:
 
   test:
     if: github.actor != 'allcontributors[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -203,7 +210,7 @@ jobs:
   # Passes only when all parallel build/test jobs succeed.
   build:
     if: github.actor != 'allcontributors[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [build-emerald, build-firered, build-leafgreen, release, test]
     steps:
       - name: All builds passed
@@ -211,7 +218,7 @@ jobs:
 
   docs_validate:
     if: github.actor != 'allcontributors[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -221,7 +228,7 @@ jobs:
 
   allcontributors:
     if: github.actor == 'allcontributors[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: []
     steps:
       - name: Automatically pass for allcontributors

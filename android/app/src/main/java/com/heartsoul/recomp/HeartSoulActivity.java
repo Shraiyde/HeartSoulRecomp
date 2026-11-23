@@ -1,14 +1,20 @@
 package com.heartsoul.recomp;
 
 import android.app.ActivityOptions;
+import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.graphics.Point;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Display;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.FrameLayout;
 
 import org.libsdl.app.SDLActivity;
 
@@ -24,9 +30,9 @@ import org.libsdl.app.SDLActivity;
  * game, so a game launched without the start screen still uses them.
  */
 public class HeartSoulActivity extends SDLActivity {
-    static final String EXTRA_JOIN_PC_HOST = "joinPcHost";
-    static final String EXTRA_LINK_MODE = "linkMode";
-    static final String EXTRA_LOCAL_PORT = "localPort";
+    static final String EXTRA_COOP_MODE = "coopMode";
+    static final String EXTRA_COOP_ADDRESS = "coopAddress";
+    static final String EXTRA_COOP_PORT = "coopPort";
     private static final String TAG = "HeartSoul";
     private static final long POLL_INTERVAL_MS = 100;
     private static final int DISPLAY_CHECK_TICKS = 10; // look for a display once a second
@@ -35,6 +41,8 @@ public class HeartSoulActivity extends SDLActivity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private BottomScreenPresentation presentation;
+    private BottomScreenView singleScreenView;
+    private Dialog singleScreenDialog;
     private Object lastSink;
     private String lastJson;
     private boolean bridgeBroken;
@@ -48,6 +56,8 @@ public class HeartSoulActivity extends SDLActivity {
     private boolean bottomActivityLaunched;
     private BottomScreenActivity focusReclaimedFor;
     private boolean resumed;
+    private boolean coopHosting;
+    private boolean coopJoining;
 
     private static final long[] RECLAIM_DELAYS_MS = { 300, 800, 1500, 3000 };
 
@@ -84,7 +94,7 @@ public class HeartSoulActivity extends SDLActivity {
                     handler.postDelayed(reclaimFocusLater, delay);
                 }
             }
-            Object sink = presentation != null ? presentation : activity;
+            Object sink = presentation != null ? presentation : activity != null ? activity : singleScreenView;
             if (sink != lastSink) {
                 lastSink = sink;
                 lastJson = null;
@@ -100,8 +110,10 @@ public class HeartSoulActivity extends SDLActivity {
                         BottomScreenState state = BottomScreenState.parse(json);
                         if (presentation != null) {
                             presentation.setState(state);
-                        } else {
+                        } else if (activity != null) {
                             activity.setState(state);
+                        } else if (singleScreenView != null) {
+                            singleScreenView.setState(state);
                         }
                     }
                 } catch (UnsatisfiedLinkError e) {
@@ -127,12 +139,103 @@ public class HeartSoulActivity extends SDLActivity {
         display.getRealSize(size);
         Settings settings = Settings.load(this, size.x, size.y);
         settings.applyToEnvironment();
-        armLink(getIntent().getStringExtra(EXTRA_LINK_MODE),
-                getIntent().getIntExtra(EXTRA_LOCAL_PORT, 0),
-                getIntent().getBooleanExtra(EXTRA_JOIN_PC_HOST, false));
+        String coopMode = getIntent().getStringExtra(EXTRA_COOP_MODE);
+        if (coopMode == null) coopMode = "solo";
+        if ("pc".equals(coopMode)) {
+            try {
+                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
+            } catch (android.system.ErrnoException e) {
+                Log.w(TAG, "could not arm the PC host join", e);
+            }
+            coopMode = "solo";
+        }
+        coopHosting = "host".equals(coopMode);
+        String coopAddress = getIntent().getStringExtra(EXTRA_COOP_ADDRESS);
+        int coopPort = getIntent().getIntExtra(EXTRA_COOP_PORT, CoopNetwork.PORT);
+        if (coopHosting || "join".equals(coopMode)) {
+            String startError = CoopNetwork.start(this);
+            if (startError != null && !startError.isEmpty()) Log.e(TAG, startError);
+        }
+        if (coopHosting) {
+            if (!CoopNetwork.hostOpen()) Log.e(TAG, "could not open the ZeroTier host listener");
+            CoopLobby.startHosting(this);
+        } else if ("join".equals(coopMode)) {
+            coopJoining = true;
+            int localPort = CoopNetwork.joinOpen(coopAddress);
+            if (localPort > 0) {
+                coopAddress = "127.0.0.1";
+                coopPort = localPort;
+            } else {
+                Log.e(TAG, "could not open the ZeroTier peer connection");
+            }
+        }
+        try {
+            android.system.Os.setenv("HNS_COOP_MODE", coopMode, true);
+            android.system.Os.setenv("HNS_COOP_ADDRESS", coopAddress == null ? "" : coopAddress, true);
+            android.system.Os.setenv("HNS_COOP_PORT", Integer.toString(coopPort), true);
+        } catch (android.system.ErrnoException e) {
+            Log.w(TAG, "could not configure direct co-op", e);
+        }
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
+        installSingleScreenAccess();
+    }
+
+    private void installSingleScreenAccess() {
+        Display second = SecondScreen.find(this, getWindowManager().getDefaultDisplay().getDisplayId());
+        if (second != null || !bottomScreenEnabled) return;
+        FrameLayout root = findViewById(android.R.id.content);
+        if (root == null) return;
+        Button open = new Button(this);
+        open.setText("BOTTOM SCREEN");
+        open.setTextSize(14);
+        open.setMinWidth(dp(140));
+        open.setMinHeight(dp(48));
+        open.setPadding(dp(14), dp(8), dp(14), dp(8));
+        open.setAlpha(0.96f);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.RIGHT);
+        params.topMargin = dp(12);
+        params.rightMargin = dp(12);
+        root.addView(open, params);
+        open.setOnClickListener(v -> showSingleScreen());
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void showSingleScreen() {
+        if (singleScreenDialog != null && singleScreenDialog.isShowing()) return;
+        Dialog dialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        FrameLayout layout = new FrameLayout(this);
+        singleScreenView = new BottomScreenView(this);
+        layout.addView(singleScreenView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        Button close = new Button(this);
+        close.setText("RETURN TO GAME");
+        close.setTextSize(10);
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.RIGHT);
+        layout.addView(close, closeParams);
+        close.setOnClickListener(v -> dialog.dismiss());
+        dialog.setContentView(layout);
+        dialog.setOnDismissListener(v -> {
+            singleScreenView = null;
+            singleScreenDialog = null;
+            lastSink = null;
+            lastJson = null;
+        });
+        singleScreenDialog = dialog;
+        dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+        }
     }
 
     @Override
@@ -149,7 +252,6 @@ public class HeartSoulActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        noteBackground(false);
         resumed = true;
         ticksUntilDisplayCheck = 0;
         handler.removeCallbacks(poll);
@@ -158,13 +260,11 @@ public class HeartSoulActivity extends SDLActivity {
 
     @Override
     protected void onPause() {
-        // Flush the link and tell the other phone this one is in the background
-        // before Android freezes the process, so a switch does not look like a drop.
-        noteBackground(true);
         resumed = false;
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
         dismissPresentation();
+        if (singleScreenDialog != null) singleScreenDialog.dismiss();
         super.onPause();
     }
 
@@ -179,40 +279,16 @@ public class HeartSoulActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (coopHosting) CoopLobby.stopHosting(this);
+        if (coopHosting || coopJoining) CoopNetwork.close();
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
         dismissPresentation();
+        if (singleScreenDialog != null) singleScreenDialog.dismiss();
         BottomScreenActivity.finishCurrent();
         running = false;
-        HeartSoulLink.shutdown();
         super.onDestroy();
     }
-
-    private void armLink(String mode, int localPort, boolean legacyPc) {
-        try {
-            if ("host".equals(mode)) {
-                android.system.Os.setenv("HNS_COOP_HOST", "1", true);
-                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
-            } else if ("join".equals(mode)) {
-                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
-                android.system.Os.setenv("HNS_COOP_LOCAL_PORT", Integer.toString(localPort), true);
-            } else if ("pc".equals(mode) || legacyPc) {
-                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
-            }
-        } catch (android.system.ErrnoException e) {
-            Log.w(TAG, "could not arm the co-op link", e);
-        }
-    }
-
-    private void noteBackground(boolean background) {
-        try {
-            nativeCoopBackground(background);
-        } catch (UnsatisfiedLinkError ignored) {
-            // The game library is not loaded yet.
-        }
-    }
-
-    private native void nativeCoopBackground(boolean background);
 
     private void showBottomScreen() {
         Display target = SecondScreen.find(this, getWindowManager().getDefaultDisplay().getDisplayId());
