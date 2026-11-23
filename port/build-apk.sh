@@ -28,5 +28,9 @@ if [ -n "${HNS_LOBBY_KEY:-}" ]; then
   printf 'hns.lobbyKey=%s\n' "$HNS_LOBBY_KEY" >> android/local.lobby.properties
 fi
 cd android
-JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}" ./gradlew --no-daemon -q -Phns.asan=$ASAN assemble$VARIANT
+workers=""
+if [ -n "${HNS_GRADLE_WORKERS:-}" ]; then
+  workers="--max-workers=${HNS_GRADLE_WORKERS}"
+fi
+JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}" ./gradlew --no-daemon -q $workers -Phns.asan=$ASAN assemble$VARIANT
 ls -la app/build/outputs/apk/*/*.apk

@@ -26,6 +26,13 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      # Two compile jobs. More than that, beside Gradle's 4g heap, gets the
+      # runner killed during the arm data build and the log just stops.
+      HNS_MAKE_JOBS: 2
+      HNS_GRADLE_WORKERS: 2
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
+      GRADLE_OPTS: -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
