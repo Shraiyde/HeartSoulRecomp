@@ -1,6 +1,8 @@
 name = "heartsoul-coop-directory"
 main = "src/worker.js"
 compatibility_date = "2026-11-01"
+workers_dev = true
+preview_urls = false
 
 [[durable_objects.bindings]]
 name = "DIRECTORY"

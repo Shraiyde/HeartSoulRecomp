@@ -15,9 +15,10 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
 
-// Phone-host directory. Empty until lobby-directory is deployed. The key is
-// never logged. local.lobby.properties is written by the APK build and is
-// not committed.
+// Phone-host directory. The public worker URL is the default. A non-empty
+// HNS_LOBBY_URL replaces it. The key stays empty unless HNS_LOBBY_KEY is set,
+// and an empty key is not sent. Neither value is logged. local.lobby.properties
+// is written by the APK build and is not committed.
 def hnsLobbyUrl = (findProperty('hns.lobbyUrl') ?: '').toString()
 def hnsLobbyKey = (findProperty('hns.lobbyKey') ?: '').toString()
 def lobbyFile = rootProject.file('local.lobby.properties')
@@ -30,6 +31,9 @@ if (lobbyFile.exists()) {
     if (lobbyProps.getProperty('hns.lobbyKey') != null) {
         hnsLobbyKey = lobbyProps.getProperty('hns.lobbyKey')
     }
+}
+if (hnsLobbyUrl == null || hnsLobbyUrl.trim().isEmpty()) {
+    hnsLobbyUrl = 'https://heartsoul-coop-directory.heartsoulcoop.workers.dev'
 }
 
 // The version name lives in include/port_version.h, which the title screen

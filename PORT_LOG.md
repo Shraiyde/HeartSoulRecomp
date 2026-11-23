@@ -13,6 +13,28 @@ Rules for this log:
 
 ---
 
+## 2026-11-23, default lobby URL
+
+State at end of session: the directory is deployed and answers GET
+`/v1/lobbies` with an empty list. Not played on a phone.
+
+### Done
+
+- When `HNS_LOBBY_URL` is unset, the APK's `LOBBY_URL` is
+  `https://heartsoul-coop-directory.heartsoulcoop.workers.dev`.
+  `CoopLobby` appends `/v1/lobbies`, which is the path in
+  `tools/lobby-worker/src/directory.js`. `LOBBY_KEY` stays empty, and
+  `HeartSoulZeroTier` omits `X-HeartSoul-Key` in that case.
+- The phone co-op release tag `recomp-phone-1` is the only ref that
+  uploads an APK. Branch compiles still do not.
+
+### Next
+
+- Wait for the `port` compile to go green, then tag `recomp-phone-1`
+  if the phone host, joiner, and lobby path are in this commit.
+
+---
+
 ## 2026-11-23, merge phone host and own lobby
 
 State at end of session: `coop/direct-phone-host` is merged into `port`

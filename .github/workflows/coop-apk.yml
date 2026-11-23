@@ -1,7 +1,8 @@
 name: Co-op APK
 
-# Compiles the native port, including the libzt archive. No APK is uploaded
-# and no GitHub release is published until phone-to-phone co-op is finished.
+# Compiles the native port, including the libzt archive. Branch pushes are
+# compile checks and do not upload an APK. The recomp-phone-1 tag publishes
+# the debug APK, which already contains the default lobby URL.
 
 on:
   push:
@@ -11,10 +12,11 @@ on:
       - coop/direct-phone-host
     tags:
       - recomp-coop-1
+      - recomp-phone-1
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: coop-apk-${{ github.ref }}
@@ -103,4 +105,26 @@ jobs:
           done
           test "$ok" = 1
           test -f android/app/build/outputs/apk/debug/app-debug.apk
-          echo "debug APK compiled; not uploaded"
+          if [ "${GITHUB_REF}" = "refs/tags/recomp-phone-1" ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk \
+              "$RUNNER_TEMP/HeartSoulRecomp-recomp-phone-1.apk"
+            ls -lh "$RUNNER_TEMP/HeartSoulRecomp-recomp-phone-1.apk"
+          else
+            echo "debug APK compiled; not uploaded"
+          fi
+
+      - name: Publish phone co-op release
+        if: github.ref == 'refs/tags/recomp-phone-1'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: recomp-phone-1
+          name: Heart & Soul phone co-op 1
+          files: ${{ runner.temp }}/HeartSoulRecomp-recomp-phone-1.apk
+          body: |
+            Phone-to-phone Heart & Soul co-op. HOST A GAME and JOIN A GAME use
+            embedded ZeroTier. Hosts are listed at the Heart & Soul lobby directory.
+            JOIN PC HOST still joins the Windows World Host.
+            This APK is the CI debug build.
+          draft: false
+          prerelease: false
+          make_latest: false

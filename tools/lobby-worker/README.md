@@ -5,9 +5,11 @@ A host leaves with POST `{ "key", "remove": true }` or DELETE. Entries expire
 after 90 seconds without a new announce. Game traffic does not pass through
 this worker.
 
-The worker secret is `LOBBY_KEY`. The APK build reads the same value from the
-GitHub Actions secret `HNS_LOBBY_KEY`, and the worker URL from the repository
-variable `HNS_LOBBY_URL`. Neither value is committed.
+The worker is live without `LOBBY_KEY`, so it accepts requests that omit
+`X-HeartSoul-Key`. The APK defaults `LOBBY_URL` to
+`https://heartsoul-coop-directory.heartsoulcoop.workers.dev` and leaves
+`LOBBY_KEY` empty. A non-empty `HNS_LOBBY_URL` or `HNS_LOBBY_KEY` at build
+time replaces that default. Neither override is committed.
 
 ## Deploy
 
