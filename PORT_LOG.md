@@ -27,6 +27,9 @@ State at end of session: the directory is deployed and answers GET
   `HeartSoulZeroTier` omits `X-HeartSoul-Key` in that case.
 - The phone co-op release tag `recomp-phone-1` is the only ref that
   uploads an APK. Branch compiles still do not.
+- JOIN PC HOST still has the baked Windows host address and port. The
+  phone-host merge had dropped those two helpers, and the first `port`
+  compile stopped there.
 
 ### Next
 
