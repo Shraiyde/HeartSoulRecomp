@@ -55,8 +55,7 @@ final class CoopLobby {
 
     static String lastError() { return lastError; }
 
-    private static String[] access(Context context) {
-        (void) context;
+    private static String[] access() {
         String url = BuildConfig.LOBBY_URL == null ? "" : BuildConfig.LOBBY_URL.trim();
         String password = BuildConfig.LOBBY_KEY == null ? "" : BuildConfig.LOBBY_KEY;
         while (url.endsWith("/")) url = url.substring(0, url.length() - 1);
@@ -88,7 +87,7 @@ final class CoopLobby {
 
     static List<Lobby> fetchLobbies(Context context) {
         lastError = "";
-        String[] config = access(context);
+        String[] config = access();
         if (config[0].isEmpty()) {
             lastError = "The online lobby directory is not configured in this build.";
             return Collections.emptyList();
@@ -141,7 +140,7 @@ final class CoopLobby {
 
     static void startHosting(Context context) {
         stopHosting(context);
-        final String[] config = access(context);
+        final String[] config = access();
         if (config[0].isEmpty()) {
             Log.e(TAG, "Cannot announce host: lobby directory configuration is missing");
             return;
@@ -198,7 +197,7 @@ final class CoopLobby {
         String key = hostKey;
         hostKey = "";
         if (!key.isEmpty()) {
-            String[] config = access(context);
+            String[] config = access();
             if (!config[0].isEmpty()) {
                 HeartSoulZeroTier.setLobbyKey(config[1]);
                 try {

@@ -27,6 +27,9 @@ State at end of session: the phone host, joiner, and lobby client are in
 - Leaving the activity now marks the session backgrounded, flushes the
   outbound queue, and stretches the TCP timeout. Coming back marks it
   foregrounded. The network thread keeps the 400 ms keepalive either way.
+- `CoopLobby.access` had a C `(void)` cast. javac rejected it once the
+  native build got far enough to compile Java. The unused context
+  argument is gone.
 
 ### Next
 
