@@ -58,6 +58,8 @@ static int sInWrite;
 static int sInCount;
 static uint8_t sSessionKey[32];
 static bool sPcSession;
+static bool sBackground;
+static bool sForceFlush;
 static bool sHaveKey;
 static char sClientId[20];
 
@@ -707,6 +709,26 @@ static void RunSession(int fd, int localRole, bool isHost)
             have -= 4 + len;
         }
         now = CoopNowMs();
+        {
+            bool force;
+            bool background;
+            pthread_mutex_lock(&sMu);
+            force = sForceFlush;
+            background = sBackground;
+            if (force)
+                sForceFlush = false;
+            pthread_mutex_unlock(&sMu);
+            if (force)
+            {
+#ifdef TCP_USER_TIMEOUT
+                int userMs = background ? 120000 : 20000;
+                setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &userMs, sizeof(userMs));
+#endif
+                FlushOutbound(fd, localRole, &seq);
+                lastPos = now;
+                continue;
+            }
+        }
         if (lastPos == 0 || now - lastPos >= 400)
         {
             FlushOutbound(fd, localRole, &seq);
@@ -828,12 +850,21 @@ static void *ThreadMain(void *unused)
 
 void CoopNet_SetBackgrounded(bool background)
 {
-    (void)background;
+    pthread_mutex_lock(&sMu);
+    sBackground = background;
+    sForceFlush = true;
+    pthread_mutex_unlock(&sMu);
+    CoopNet_SendWord(COOP_MSG_WORLD_READY,
+        background ? COOP_READY_BACKGROUND : COOP_READY_FOREGROUND);
 }
 
 bool CoopNet_IsBackgrounded(void)
 {
-    return false;
+    bool background;
+    pthread_mutex_lock(&sMu);
+    background = sBackground;
+    pthread_mutex_unlock(&sMu);
+    return background;
 }
 
 void CoopNet_Boot(void)
@@ -973,6 +1004,18 @@ bool CoopNet_Poll(uint16_t *type, uint8_t *payload, uint32_t *len, uint32_t cap)
     }
     return true;
 }
+
+#ifdef __ANDROID__
+#include <jni.h>
+
+JNIEXPORT void JNICALL
+Java_com_heartsoul_recomp_HeartSoulActivity_nativeCoopBackground(JNIEnv *env, jobject thiz, jboolean background)
+{
+    (void)env;
+    (void)thiz;
+    CoopNet_SetBackgrounded(background == JNI_TRUE);
+}
+#endif
 
 #else
 

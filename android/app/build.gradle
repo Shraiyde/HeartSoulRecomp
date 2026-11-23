@@ -123,10 +123,6 @@ android {
     sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/fontAssets'))
 }
 
-dependencies {
-    implementation files('libs/libzt-release.aar')
-}
-
 tasks.register('copyAsanRuntime') {
     // Resolved when the task runs, once the NDK location is known.
     def outDir = layout.buildDirectory.dir('generated/asanLibs')

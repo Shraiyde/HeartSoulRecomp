@@ -13,6 +13,28 @@ Rules for this log:
 
 ---
 
+## 2026-11-23, phone APK compile
+
+State at end of session: the phone host, joiner, and lobby client are in
+`port`. Not played on a phone.
+
+### Done
+
+- The assemble step was rebuilding libzt from `third_party/libzt`, which
+  CI does not check out. The AAR from the earlier step already sits in
+  `android/app/libs/zerotier/`. The extra Gradle dependency on
+  `libs/libzt-release.aar` is gone.
+- Leaving the activity now marks the session backgrounded, flushes the
+  outbound queue, and stretches the TCP timeout. Coming back marks it
+  foregrounded. The network thread keeps the 400 ms keepalive either way.
+
+### Next
+
+- Confirm the `port` Co-op APK run is green, then tag `recomp-phone-1`
+  so that same workflow publishes the debug APK.
+
+---
+
 ## 2026-11-23, default lobby URL
 
 State at end of session: the directory is deployed and answers GET

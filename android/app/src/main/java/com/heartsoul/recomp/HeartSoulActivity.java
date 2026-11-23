@@ -204,6 +204,16 @@ public class HeartSoulActivity extends SDLActivity {
         open.setOnClickListener(v -> showSingleScreen());
     }
 
+    private void noteBackground(boolean background) {
+        try {
+            nativeCoopBackground(background);
+        } catch (UnsatisfiedLinkError ignored) {
+            // The game library is not loaded yet.
+        }
+    }
+
+    private native void nativeCoopBackground(boolean background);
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
@@ -252,6 +262,7 @@ public class HeartSoulActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        noteBackground(false);
         resumed = true;
         ticksUntilDisplayCheck = 0;
         handler.removeCallbacks(poll);
@@ -260,6 +271,9 @@ public class HeartSoulActivity extends SDLActivity {
 
     @Override
     protected void onPause() {
+        // Flush the link and tell the other phone this one is in the background
+        // before Android freezes the process, so a switch does not look like a drop.
+        noteBackground(true);
         resumed = false;
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);

@@ -18,9 +18,6 @@ fi
 if [ "$1" = "--data" ] || [ ! -f build/android/game_data.o ]; then
   port/android-data.sh
 fi
-if [ ! -f android/app/libs/libzt-release.aar ]; then
-  port/build-libzt-android.sh
-fi
 [ -f android/local.properties ] || echo "sdk.dir=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}" > android/local.properties
 umask 077
 : > android/local.lobby.properties
