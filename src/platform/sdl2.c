@@ -82,13 +82,13 @@ extern void DoSoftReset(void);
 int DoMain(void *param);
 void ProcessEvents(void);
 void VDraw(SDL_Texture *texture);
-#ifdef __ANDROID__
 typedef struct TouchLayout {
     int w, h;
     SDL_Rect game;
     SDL_Rect l, r, a, b, selectBtn, startBtn;
     int dpadCx, dpadCy, dpadReach;
 } TouchLayout;
+#ifdef __ANDROID__
 static void BuildTouchLayout(TouchLayout *layout);
 static void DrawTouchControls(SDL_Renderer *renderer, const TouchLayout *layout);
 #endif
