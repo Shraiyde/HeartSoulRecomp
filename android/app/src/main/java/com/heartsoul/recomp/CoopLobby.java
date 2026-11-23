@@ -174,8 +174,8 @@ final class CoopLobby {
                             String result = await(id);
                             if (!result.startsWith("200\n")) {
                                 int split = result.indexOf('\n');
-                                String status = split < 0 ? "0" : result.substring(0, split);
-                                Log.w(TAG, "Lobby announcement was rejected (" + status + ")");
+                                String codeText = split < 0 ? "0" : result.substring(0, split);
+                                Log.w(TAG, "Lobby announcement was rejected (" + codeText + ")");
                             }
                         }
                     }

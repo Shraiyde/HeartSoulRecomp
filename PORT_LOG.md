@@ -32,6 +32,8 @@ State at end of session: the phone host, joiner, and lobby client are in
   argument is gone. The full job log for run 45189432643 ends on that
   error. The Actions page stops earlier, in the arm compile, which looks
   like a killed runner.
+- The announcer's HTTP status string shadowed `CoopNetwork.Status status`.
+  javac reported that as the only error on run 45192265910.
 - The co-op APK job now builds the arm and arm64 data with `make -j2`
   and runs Gradle with two workers. A local build still uses every core
   unless `HNS_MAKE_JOBS` or `HNS_GRADLE_WORKERS` is set.
