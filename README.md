@@ -79,7 +79,9 @@ Report problems on the [Issues](../../issues) page with your device model and wh
 
 ## Building
 
-See [`PORT_PLAN.md`](PORT_PLAN.md) and the newest entry in [`PORT_LOG.md`](PORT_LOG.md). In short: Docker builds the game data, then `port/build-apk.sh --data` builds the APK with the Android NDK.
+See [`PORT_PLAN.md`](PORT_PLAN.md) and the newest entry in [`PORT_LOG.md`](PORT_LOG.md). In short: Docker builds the game data, `port/build-libzt-android.sh` fetches and builds the embedded ZeroTier library, then `port/build-apk.sh --data` builds the APK with the Android NDK.
+
+Phone co-op (HOST GAME / JOIN GAME) embeds [libzt](https://github.com/zerotier/libzt) 1.8.10. libzt is licensed under the [Business Source License 1.1](https://github.com/zerotier/libzt/blob/1.8.10/LICENSE), not this repository's license. The build script downloads it; the source and the AAR are not committed. JOIN PC HOST still reaches the existing Windows World Host.
 
 ## Credits
 
@@ -91,6 +93,7 @@ See [`PORT_PLAN.md`](PORT_PLAN.md) and the newest entry in [`PORT_LOG.md`](PORT_
 - **[lidor30/PokeDaisy](https://github.com/lidor30/pokedaisy)**: the bottom screen's tabs (party, battle, bag, map, Pokédex, guide, trainer card) follow its companion screen's design. No code is copied; ours reads the game's own data natively.
 - **[fuddlesworth/pokeemerald-native](https://github.com/fuddlesworth/pokeemerald-native)**: reference for the native port.
 - **[SDL](https://www.libsdl.org/)**.
+- **[libzt](https://github.com/zerotier/libzt)** (Business Source License 1.1): the embedded ZeroTier node used for phone-to-phone co-op. No ZeroTier account or separate app is required.
 
 Port by Aman (u/BrownCountdown), developed with the help of Claude Code.
 

@@ -13,6 +13,56 @@ Rules for this log:
 
 ---
 
+## 2026-11-23, phone-to-phone co-op
+
+State at end of session: not played on a phone. No emulator run. The Co-op
+APK workflow is a compile check only. It does not upload an APK and does
+not publish a release.
+
+### Done
+
+- HOST GAME and JOIN GAME are the main start-screen buttons. JOIN PC HOST
+  stays, smaller, and still sets `HNS_COOP_JOIN=1` for the baked PC host.
+- `src/platform/coop_host.c` listens on 127.0.0.1:27770 and speaks the
+  existing HELLO / READY / AES-GCM World Host framing. `HNS_COOP_HOST=1`
+  starts that listener and joins it as role 0. A joiner uses
+  `HNS_COOP_LOCAL_PORT` and still goes through `src/coop.c`. One resume
+  after a real drop is unchanged. `tools/HeartSoulCoopServer` is not in
+  this tree and was not added or edited.
+- `HeartSoulLink` carries TCP over a controller-less ZeroTier ad-hoc
+  network whose id comes from libzt's `zts_net_compute_adhoc_id` for port
+  27770. Host bridge: ZeroTier :27770 to 127.0.0.1:27770. Joiner bridge:
+  127.0.0.1:ephemeral to the host's ZeroTier IPv6 :27770.
+- `port/build-libzt-android.sh` fetches libzt 1.8.10 (Business Source
+  License 1.1), patches the Android `select()` limit, and writes
+  `android/app/libs/libzt-release.aar`. The source and the archive stay
+  out of git. README names the license.
+- `lobby-directory/` is our Cloudflare Worker. Hosts POST every 30 seconds.
+  A joiner GETs the list and, when one host is listed, joins it. Several
+  hosts: the newest. The URL and `HNS_LOBBY_KEY` are build settings and
+  are empty until the worker is deployed. The secret is not printed.
+- Leaving the app flushes the bridge and sends a background notice. The
+  other phone keeps the session and the partner sprite for 90 seconds
+  instead of treating the silence as a drop. TCP keepalive on the phone
+  path is 15s idle, 5s interval, 9 probes, 90s user timeout.
+
+### Blocked
+
+- Two phones cannot find each other until `lobby-directory` is deployed
+  and the APK is built with `hns.lobbyUrl` and `hns.lobbyKey`. HOST GAME
+  still brings the node and the in-process host up without that URL.
+- libzt 1.8.10 has not been compiled in this session. The next CI run is
+  the first time `port/build-libzt-android.sh` runs here.
+
+### Next
+
+- Watch the Co-op APK workflow. It must compile and must not upload an APK.
+- Stephen deploys `lobby-directory` and sets the URL and `HNS_LOBBY_KEY`
+  when he wants JOIN GAME to see hosts.
+- No phone test until he asks. No new release tag.
+
+---
+
 ## 2026-11-21, co-op coverage and APK compile
 
 State at end of session: still not played on a phone or emulator. Compared

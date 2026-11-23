@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.zerotier.sockets'
+    compileSdk 34
+    ndkVersion '27.2.12479018'
+
+    defaultConfig {
+        minSdk 26
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                targets 'zt-shared'
+                arguments '-DANDROID_STL=c++_static', '-DZTS_DISABLE_CENTRAL_API=ON'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file("${rootDir}/../CMakeLists.txt")
+            version '3.22.1'
+        }
+    }
+
+    sourceSets.main.java.srcDirs += "${rootDir}/../src/bindings/java"
+    sourceSets.main.manifest.srcFile 'src/main/AndroidManifest.xml'
+}
+
+dependencies {
+}

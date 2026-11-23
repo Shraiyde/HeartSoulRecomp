@@ -25,6 +25,8 @@ import org.libsdl.app.SDLActivity;
  */
 public class HeartSoulActivity extends SDLActivity {
     static final String EXTRA_JOIN_PC_HOST = "joinPcHost";
+    static final String EXTRA_LINK_MODE = "linkMode";
+    static final String EXTRA_LOCAL_PORT = "localPort";
     private static final String TAG = "HeartSoul";
     private static final long POLL_INTERVAL_MS = 100;
     private static final int DISPLAY_CHECK_TICKS = 10; // look for a display once a second
@@ -125,13 +127,9 @@ public class HeartSoulActivity extends SDLActivity {
         display.getRealSize(size);
         Settings settings = Settings.load(this, size.x, size.y);
         settings.applyToEnvironment();
-        if (getIntent().getBooleanExtra(EXTRA_JOIN_PC_HOST, false)) {
-            try {
-                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
-            } catch (android.system.ErrnoException e) {
-                Log.w(TAG, "could not arm PC host join", e);
-            }
-        }
+        armLink(getIntent().getStringExtra(EXTRA_LINK_MODE),
+                getIntent().getIntExtra(EXTRA_LOCAL_PORT, 0),
+                getIntent().getBooleanExtra(EXTRA_JOIN_PC_HOST, false));
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);
@@ -151,6 +149,7 @@ public class HeartSoulActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        noteBackground(false);
         resumed = true;
         ticksUntilDisplayCheck = 0;
         handler.removeCallbacks(poll);
@@ -159,6 +158,9 @@ public class HeartSoulActivity extends SDLActivity {
 
     @Override
     protected void onPause() {
+        // Flush the link and tell the other phone this one is in the background
+        // before Android freezes the process, so a switch does not look like a drop.
+        noteBackground(true);
         resumed = false;
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
@@ -182,8 +184,35 @@ public class HeartSoulActivity extends SDLActivity {
         dismissPresentation();
         BottomScreenActivity.finishCurrent();
         running = false;
+        HeartSoulLink.shutdown();
         super.onDestroy();
     }
+
+    private void armLink(String mode, int localPort, boolean legacyPc) {
+        try {
+            if ("host".equals(mode)) {
+                android.system.Os.setenv("HNS_COOP_HOST", "1", true);
+                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
+            } else if ("join".equals(mode)) {
+                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
+                android.system.Os.setenv("HNS_COOP_LOCAL_PORT", Integer.toString(localPort), true);
+            } else if ("pc".equals(mode) || legacyPc) {
+                android.system.Os.setenv("HNS_COOP_JOIN", "1", true);
+            }
+        } catch (android.system.ErrnoException e) {
+            Log.w(TAG, "could not arm the co-op link", e);
+        }
+    }
+
+    private void noteBackground(boolean background) {
+        try {
+            nativeCoopBackground(background);
+        } catch (UnsatisfiedLinkError ignored) {
+            // The game library is not loaded yet.
+        }
+    }
+
+    private native void nativeCoopBackground(boolean background);
 
     private void showBottomScreen() {
         Display target = SecondScreen.find(this, getWindowManager().getDefaultDisplay().getDisplayId());

@@ -1,0 +1,11 @@
+name = "heartsoul-coop-directory"
+main = "src/worker.js"
+compatibility_date = "2026-11-01"
+
+[[durable_objects.bindings]]
+name = "DIRECTORY"
+class_name = "HostDirectory"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HostDirectory"]

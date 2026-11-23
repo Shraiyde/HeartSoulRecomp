@@ -37,6 +37,7 @@
 #define COOP_QUEUE 128
 #define COOP_PARTNER_HIDE_MS 6000u
 #define COOP_BATTLE_SILENCE_MS 6000u
+#define COOP_BACKGROUND_HOLD_MS 90000u
 
 struct CoopWord
 {
@@ -87,6 +88,8 @@ static EWRAM_DATA bool8 sTrainerBBeaten;
 static EWRAM_DATA u32 sConfigSeq;
 static EWRAM_DATA u8 sConfigAckWait;
 static EWRAM_DATA bool8 sLockedForPartner;
+static EWRAM_DATA bool8 sPartnerBackground;
+static EWRAM_DATA bool8 sAnnouncedBackground;
 
 #define COOP_SIO_FIELD  1u
 #define COOP_SIO_SCRIPT 2u
@@ -614,6 +617,10 @@ static void HandleInbound(void)
                 if (gBattleOutcome == 0)
                     gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
             }
+            else if (value == COOP_READY_BACKGROUND)
+                sPartnerBackground = TRUE;
+            else if (value == COOP_READY_FOREGROUND)
+                sPartnerBackground = FALSE;
         }
         else if (type == COOP_MSG_WORLD_CONFIG && len >= 20)
         {
@@ -903,7 +910,7 @@ static void UpdatePartner(const struct CoopRemoteView *remote)
 
     ClearSlot(COOP_PARTNER_SLOT);
     ClearSlot(COOP_FOLLOWER_SLOT);
-    if (!remote->valid || remote->ageMs > COOP_PARTNER_HIDE_MS)
+    if (!remote->valid || remote->ageMs > (sPartnerBackground ? COOP_BACKGROUND_HOLD_MS : COOP_PARTNER_HIDE_MS))
         return;
     if (gPlayerAvatar.objectEventId >= OBJECT_EVENTS_COUNT)
         return;
@@ -960,7 +967,7 @@ static void MaintainPartner(void)
     /* ClearSlot inside UpdatePartner wipes a sprite we just asked to walk.
      * Only rebuild when the slot is missing, the graphics changed, or the
      * partner is on a new map. While they are present, just step them. */
-    if (!remote.valid || remote.ageMs > COOP_PARTNER_HIDE_MS)
+    if (!remote.valid || remote.ageMs > (sPartnerBackground ? COOP_BACKGROUND_HOLD_MS : COOP_PARTNER_HIDE_MS))
     {
         ClearSlot(COOP_PARTNER_SLOT);
         ClearSlot(COOP_FOLLOWER_SLOT);
@@ -1026,7 +1033,7 @@ static void WatchBattle(void)
     if (!CoopNet_IsUp())
         sAbort = TRUE;
     age = CoopNet_PartnerAgeMs();
-    if (sHadPartner && age > COOP_BATTLE_SILENCE_MS)
+    if (sHadPartner && age > (sPartnerBackground ? COOP_BACKGROUND_HOLD_MS : COOP_BATTLE_SILENCE_MS))
         sAbort = TRUE;
     if (!sAbort)
         return;
@@ -1232,7 +1239,8 @@ bool8 Coop_PartnerVisible(void)
     u32 localMap;
 
     CoopNet_CopyRemote(&remote);
-    if (!remote.valid || remote.ageMs > COOP_PARTNER_HIDE_MS || gSaveBlock1Ptr == NULL)
+    if (!remote.valid || remote.ageMs > (sPartnerBackground ? COOP_BACKGROUND_HOLD_MS : COOP_PARTNER_HIDE_MS)
+        || gSaveBlock1Ptr == NULL)
         return FALSE;
     localMap = (u32)gSaveBlock1Ptr->location.mapGroup
         | ((u32)gSaveBlock1Ptr->location.mapNum << 16);
@@ -1267,12 +1275,19 @@ void Coop_Frame(void)
     HandleInbound();
     if (up)
     {
+        bool8 background = CoopNet_IsBackgrounded();
         ScanStory();
         FlushOut();
         AdvertiseReady();
         PublishConfig();
         PublishPosition();
         PublishLead();
+        if (background != sAnnouncedBackground)
+        {
+            if (CoopNet_SendWord(COOP_MSG_WORLD_READY,
+                    background ? COOP_READY_BACKGROUND : COOP_READY_FOREGROUND))
+                sAnnouncedBackground = background;
+        }
     }
     if (CoopNet_PartnerAgeMs() < 2000)
         sHadPartner = TRUE;

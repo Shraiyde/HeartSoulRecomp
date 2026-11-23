@@ -1,8 +1,7 @@
 name: Co-op APK
 
-# Compiles the native port. A GitHub release is published only from the
-# recomp-coop-1 tag, after the co-op work is complete. Branch pushes are
-# compile checks and do not upload a release asset.
+# Compiles the native port, including the libzt archive. No APK is uploaded
+# and no GitHub release is published until phone-to-phone co-op is finished.
 
 on:
   push:
@@ -14,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: coop-apk-${{ github.ref }}
@@ -55,12 +54,16 @@ jobs:
           "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" --install \
             "platforms;android-34" \
             "build-tools;34.0.0" \
+            "cmake;3.22.1" \
             "ndk;27.2.12479018"
 
       - name: Build image
         run: docker build -t hns-port port/docker
 
       - name: Assemble debug APK
+        env:
+          HNS_LOBBY_URL: ${{ vars.HNS_LOBBY_URL }}
+          HNS_LOBBY_KEY: ${{ secrets.HNS_LOBBY_KEY }}
         run: |
           set -euo pipefail
           chmod +x port/*.sh android/gradlew
@@ -88,29 +91,5 @@ jobs:
             sleep $((attempt * 20))
           done
           test "$ok" = 1
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
-            "$RUNNER_TEMP/HeartSoulRecomp-recomp-coop-1.apk"
-          ls -lh "$RUNNER_TEMP/HeartSoulRecomp-recomp-coop-1.apk"
-
-      - name: Upload compile artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: heartsoul-recomp-debug-apk
-          path: ${{ runner.temp }}/HeartSoulRecomp-recomp-coop-1.apk
-          if-no-files-found: error
-
-      - name: Publish release
-        if: github.ref == 'refs/tags/recomp-coop-1'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: recomp-coop-1
-          name: Heart & Soul native co-op 1
-          files: ${{ runner.temp }}/HeartSoulRecomp-recomp-coop-1.apk
-          body: |
-            Native Heart & Soul co-op. One tap on Join PC Host connects both phones
-            to the Windows World Host over ZeroTier. No PIN and no relay.
-            The existing HeartSoulWorldHost zip (world-host-13 or world-host-14)
-            speaks this protocol.
-          draft: false
-          prerelease: false
-          make_latest: true
+          test -f android/app/build/outputs/apk/debug/app-debug.apk
+          echo "debug APK compiled; not uploaded"

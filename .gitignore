@@ -43,6 +43,7 @@ prefabs.json
 *.diff
 *.sym
 *.js
+!lobby-directory/**/*.js
 /pokeemerald-*.png
 /pokefirered-*.png
 /pokeleafgreen-*.png
@@ -83,6 +84,8 @@ android/build/
 android/app/build/
 android/app/.cxx/
 android/local.properties
+android/local.lobby.properties
+android/app/libs/
 /build/android/
 android/keystore/
 android/keystore.properties

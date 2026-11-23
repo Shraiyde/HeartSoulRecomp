@@ -18,11 +18,13 @@ import android.view.WindowInsetsController;
  * choices only apply when the game starts.
  */
 public class StartActivity extends Activity implements StartScreenView.Listener {
+    private StartScreenView screen;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (HeartSoulActivity.isRunning()) {
-            launchGame(false);
+            launchGame("solo", 0);
             return;
         }
         Display display = getWindowManager().getDefaultDisplay();
@@ -30,28 +32,74 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
         display.getRealSize(size);
         Settings settings = Settings.load(this, size.x, size.y);
         boolean hasSecondScreen = SecondScreen.find(this, display.getDisplayId()) != null;
-        StartScreenView view = new StartScreenView(this, settings, size.x, size.y, hasSecondScreen,
+        screen = new StartScreenView(this, settings, size.x, size.y, hasSecondScreen,
                 "v" + versionName(), this);
-        setContentView(view);
+        setContentView(screen);
         hideSystemBars();
-        view.requestFocus();
+        screen.requestFocus();
     }
 
     @Override
     public void onStartGame(Settings settings) {
         settings.save(this);
-        launchGame(false);
+        launchGame("solo", 0);
+    }
+
+    @Override
+    public void onHostGame(Settings settings) {
+        settings.save(this);
+        note("Starting the phone link…");
+        new Thread(() -> {
+            HeartSoulLink.Outcome outcome = HeartSoulLink.prepareHost(this);
+            runOnUiThread(() -> {
+                if (!outcome.ok) {
+                    note(outcome.message);
+                    if (screen != null) {
+                        screen.armAgain();
+                    }
+                    return;
+                }
+                launchGame("host", 0);
+            });
+        }, "hs-host").start();
+    }
+
+    @Override
+    public void onJoinGame(Settings settings) {
+        settings.save(this);
+        note("Looking for a hosted game…");
+        new Thread(() -> {
+            HeartSoulLink.Outcome outcome = HeartSoulLink.prepareJoin(this);
+            runOnUiThread(() -> {
+                if (!outcome.ok) {
+                    note(outcome.message);
+                    if (screen != null) {
+                        screen.armAgain();
+                    }
+                    return;
+                }
+                launchGame("join", outcome.localPort);
+            });
+        }, "hs-join").start();
     }
 
     @Override
     public void onJoinPcHost(Settings settings) {
         settings.save(this);
-        launchGame(true);
+        launchGame("pc", 0);
     }
 
-    private void launchGame(boolean joinPcHost) {
+    private void note(String text) {
+        if (screen != null) {
+            screen.setStatus(text);
+        }
+    }
+
+    private void launchGame(String mode, int localPort) {
         Intent intent = new Intent(this, HeartSoulActivity.class);
-        intent.putExtra(HeartSoulActivity.EXTRA_JOIN_PC_HOST, joinPcHost);
+        intent.putExtra(HeartSoulActivity.EXTRA_LINK_MODE, mode);
+        intent.putExtra(HeartSoulActivity.EXTRA_LOCAL_PORT, localPort);
+        intent.putExtra(HeartSoulActivity.EXTRA_JOIN_PC_HOST, "pc".equals(mode));
         startActivity(intent);
         overridePendingTransition(0, 0);
         finish();

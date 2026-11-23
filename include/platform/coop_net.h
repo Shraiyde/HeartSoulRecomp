@@ -18,6 +18,8 @@
 
 #define COOP_READY_STORY           1u
 #define COOP_READY_BATTLE_ABORT    2u
+#define COOP_READY_BACKGROUND      3u
+#define COOP_READY_FOREGROUND      4u
 
 #define COOP_POSITION_WORDS        8
 
@@ -35,9 +37,12 @@ struct CoopRemoteView
     uint32_t ageMs;
 };
 
-/* Start the single PC-host connection if HNS_COOP_JOIN=1. No-op otherwise
- * and no-op when a connection is already up. */
+/* Start the link. HNS_COOP_HOST=1 listens on this phone and joins it.
+ * HNS_COOP_JOIN=1 with HNS_COOP_LOCAL_PORT joins another phone through
+ * the local bridge. HNS_COOP_JOIN=1 alone still joins the PC host. */
 void CoopNet_Boot(void);
+void CoopNet_SetBackgrounded(bool background);
+bool CoopNet_IsBackgrounded(void);
 
 bool CoopNet_IsUp(void);
 int CoopNet_Role(void);

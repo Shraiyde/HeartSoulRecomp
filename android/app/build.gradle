@@ -15,6 +15,23 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
 
+// Phone-host directory. Empty until lobby-directory is deployed. The key is
+// never logged. local.lobby.properties is written by the APK build and is
+// not committed.
+def hnsLobbyUrl = (findProperty('hns.lobbyUrl') ?: '').toString()
+def hnsLobbyKey = (findProperty('hns.lobbyKey') ?: '').toString()
+def lobbyFile = rootProject.file('local.lobby.properties')
+if (lobbyFile.exists()) {
+    def lobbyProps = new Properties()
+    lobbyFile.withInputStream { lobbyProps.load(it) }
+    if (lobbyProps.getProperty('hns.lobbyUrl') != null) {
+        hnsLobbyUrl = lobbyProps.getProperty('hns.lobbyUrl')
+    }
+    if (lobbyProps.getProperty('hns.lobbyKey') != null) {
+        hnsLobbyKey = lobbyProps.getProperty('hns.lobbyKey')
+    }
+}
+
 // The version name lives in include/port_version.h, which the title screen
 // also shows, so a release changes it in one place.
 def portVersionHeader = rootProject.file('../include/port_version.h')
@@ -29,10 +46,18 @@ android {
     compileSdk 34
     ndkVersion '27.2.12479018'
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId 'com.heartsoul.recomp'
         minSdk 26
         targetSdk 34
+        def lobbyUrl = hnsLobbyUrl.replace('\\', '\\\\').replace('"', '\\"')
+        def lobbyKey = hnsLobbyKey.replace('\\', '\\\\').replace('"', '\\"')
+        buildConfigField 'String', 'LOBBY_URL', "\"${lobbyUrl}\""
+        buildConfigField 'String', 'LOBBY_KEY', "\"${lobbyKey}\""
         versionCode 6
         versionName portVersionName
 
@@ -87,6 +112,10 @@ android {
         packagingOptions.jniLibs.useLegacyPackaging = true
     }
     sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/fontAssets'))
+}
+
+dependencies {
+    implementation files('libs/libzt-release.aar')
 }
 
 tasks.register('copyAsanRuntime') {

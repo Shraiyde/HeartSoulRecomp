@@ -14,7 +14,18 @@ done
 if [ "$1" = "--data" ] || [ ! -f build/android/game_data.o ]; then
   port/android-data.sh
 fi
+if [ ! -f android/app/libs/libzt-release.aar ]; then
+  port/build-libzt-android.sh
+fi
 [ -f android/local.properties ] || echo "sdk.dir=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}" > android/local.properties
+umask 077
+: > android/local.lobby.properties
+if [ -n "${HNS_LOBBY_URL:-}" ]; then
+  printf 'hns.lobbyUrl=%s\n' "$HNS_LOBBY_URL" >> android/local.lobby.properties
+fi
+if [ -n "${HNS_LOBBY_KEY:-}" ]; then
+  printf 'hns.lobbyKey=%s\n' "$HNS_LOBBY_KEY" >> android/local.lobby.properties
+fi
 cd android
 JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}" ./gradlew --no-daemon -q -Phns.asan=$ASAN assemble$VARIANT
 ls -la app/build/outputs/apk/*/*.apk

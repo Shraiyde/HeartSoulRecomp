@@ -4,7 +4,12 @@
 #define _GNU_SOURCE
 #include "platform/coop_net.h"
 #include "platform/coop_aes.h"
+#include "platform/coop_host.h"
 #include "platform/coop_secret.h"
+
+#ifdef __ANDROID__
+#include <jni.h>
+#endif
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -59,6 +64,10 @@ static int sInCount;
 static uint8_t sSessionKey[32];
 static bool sHaveKey;
 static char sClientId[20];
+static int sPhoneLink;
+static bool sBackground;
+static volatile bool sForceFlush;
+static int sSessionFd = -1;
 
 static uint64_t CoopNowMs(void)
 {
@@ -398,7 +407,7 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq)
     }
 }
 
-static bool ReadLine(int fd, char *out, size_t cap)
+static bool ReadLine(int fd, char *out, size_t cap, uint64_t limitMs)
 {
     size_t n = 0;
     uint64_t start = CoopNowMs();
@@ -406,7 +415,7 @@ static bool ReadLine(int fd, char *out, size_t cap)
     {
         uint8_t b;
         ssize_t r;
-        if (CoopNowMs() - start > 8000)
+        if (CoopNowMs() - start > limitMs)
             return false;
         r = recv(fd, &b, 1, 0);
         if (r < 0)
@@ -438,12 +447,38 @@ static bool ReadLine(int fd, char *out, size_t cap)
     return false;
 }
 
-static int TcpConnect(const char *host, int port)
+static void TuneSocket(int fd, bool phone)
+{
+    int on = 1;
+    int idle = phone ? 15 : 30;
+    int interval = 5;
+    int count = phone ? 9 : 3;
+    int userMs = phone ? 90000 : 20000;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+    setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+#ifdef TCP_KEEPIDLE
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+#endif
+#ifdef TCP_KEEPINTVL
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+#endif
+#ifdef TCP_KEEPCNT
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
+#endif
+#ifdef TCP_USER_TIMEOUT
+    setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &userMs, sizeof(userMs));
+#endif
+    (void)idle;
+    (void)interval;
+    (void)count;
+    (void)userMs;
+}
+
+static int TcpConnect(const char *host, int port, int waitMs)
 {
     int fd;
     struct sockaddr_in addr;
     int flags;
-    int on = 1;
     int rc;
 
     memset(&addr, 0, sizeof(addr));
@@ -454,14 +489,7 @@ static int TcpConnect(const char *host, int port)
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
         return -1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-    setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
-#ifdef TCP_USER_TIMEOUT
-    {
-        int ms = 20000;
-        setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &ms, sizeof(ms));
-    }
-#endif
+    TuneSocket(fd, sPhoneLink != 0);
     flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
@@ -478,7 +506,7 @@ static int TcpConnect(const char *host, int port)
         pfd.fd = fd;
         pfd.events = POLLOUT;
         pfd.revents = 0;
-        if (poll(&pfd, 1, 8000) <= 0)
+        if (poll(&pfd, 1, waitMs) <= 0)
         {
             close(fd);
             return -1;
@@ -582,7 +610,7 @@ static void RunSession(int fd)
         return;
     }
     memset(hello, 0, sizeof(hello));
-    if (!ReadLine(fd, line, sizeof(line)))
+    if (!ReadLine(fd, line, sizeof(line), sPhoneLink ? 20000 : 8000))
     {
         close(fd);
         return;
@@ -607,8 +635,9 @@ static void RunSession(int fd)
     sRole = sender;
     sLinkUp = true;
     sEverUp = true;
+    sSessionFd = fd;
     pthread_mutex_unlock(&sMu);
-    fprintf(stderr, "co-op: joined PC host\n");
+    fprintf(stderr, "co-op: joined host\n");
 
     while (sWant)
     {
@@ -628,6 +657,19 @@ static void RunSession(int fd)
             DecodeEncrypted(acc + 4, len);
             memmove(acc, acc + 4 + len, have - 4 - len);
             have -= 4 + len;
+        }
+        if (sForceFlush)
+        {
+            sForceFlush = false;
+#ifdef TCP_USER_TIMEOUT
+            if (sBackground)
+            {
+                int userMs = 120000;
+                setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &userMs, sizeof(userMs));
+            }
+#endif
+            FlushOutbound(fd, sender, &seq);
+            lastPos = CoopNowMs();
         }
         now = CoopNowMs();
         if (lastPos == 0 || now - lastPos >= 400)
@@ -654,25 +696,60 @@ static void RunSession(int fd)
         }
     }
 down:
+    pthread_mutex_lock(&sMu);
+    if (sSessionFd == fd)
+        sSessionFd = -1;
+    pthread_mutex_unlock(&sMu);
     NoteLink(false);
     close(fd);
-    fprintf(stderr, "co-op: PC host link down\n");
+    fprintf(stderr, "co-op: host link down\n");
+}
+
+static void ChooseEndpoint(char *host, size_t hostCap, int *port)
+{
+    const char *asHost = getenv("HNS_COOP_HOST");
+    const char *localPort = getenv("HNS_COOP_LOCAL_PORT");
+    sPhoneLink = 0;
+    if (asHost != NULL && asHost[0] == '1')
+    {
+        int spins = 0;
+        CoopHost_Start();
+        while (!CoopHost_Listening() && spins < 50)
+        {
+            usleep(100 * 1000);
+            spins++;
+        }
+        snprintf(host, hostCap, "127.0.0.1");
+        *port = 27770;
+        sPhoneLink = 1;
+        return;
+    }
+    if (localPort != NULL && localPort[0] != '\0')
+    {
+        snprintf(host, hostCap, "127.0.0.1");
+        *port = atoi(localPort);
+        sPhoneLink = 1;
+        return;
+    }
+    CoopSecretHost(host);
+    *port = CoopSecretPort();
 }
 
 static void *ThreadMain(void *unused)
 {
-    char host[16];
+    char host[64];
     int port;
+    int waitMs;
     (void)unused;
     signal(SIGPIPE, SIG_IGN);
-    CoopSecretHost(host);
-    port = CoopSecretPort();
+    ChooseEndpoint(host, sizeof(host), &port);
+    waitMs = sPhoneLink ? 20000 : 8000;
     PrepareKey();
     LoadOrCreateClientId();
 
     while (sWant)
     {
-        int fd = TcpConnect(host, port);
+        int fd = TcpConnect(host, port, waitMs);
         if (fd < 0)
         {
             if (sEverUp)
@@ -684,7 +761,7 @@ static void *ThreadMain(void *unused)
             /* First join: a short wait, then one more try, then stop.
              * No popup and no reconnect loop. */
             usleep(1500 * 1000);
-            fd = TcpConnect(host, port);
+            fd = TcpConnect(host, port, waitMs);
             if (fd < 0)
                 break;
         }
@@ -696,7 +773,7 @@ static void *ThreadMain(void *unused)
         if (sResumeSpent)
             break;
         sResumeSpent = true;
-        fprintf(stderr, "co-op: resuming PC host session\n");
+        fprintf(stderr, "co-op: resuming host session\n");
         usleep(400 * 1000);
     }
     NoteLink(false);
@@ -704,10 +781,33 @@ static void *ThreadMain(void *unused)
     return NULL;
 }
 
+void CoopNet_SetBackgrounded(bool background)
+{
+    pthread_mutex_lock(&sMu);
+    sBackground = background;
+    sForceFlush = true;
+    pthread_mutex_unlock(&sMu);
+    CoopNet_SendWord(COOP_MSG_WORLD_READY, background ? COOP_READY_BACKGROUND : COOP_READY_FOREGROUND);
+}
+
+bool CoopNet_IsBackgrounded(void)
+{
+    bool background;
+    pthread_mutex_lock(&sMu);
+    background = sBackground;
+    pthread_mutex_unlock(&sMu);
+    return background;
+}
+
 void CoopNet_Boot(void)
 {
     const char *join = getenv("HNS_COOP_JOIN");
-    if (join == NULL || join[0] != '1')
+    const char *asHost = getenv("HNS_COOP_HOST");
+    const char *localPort = getenv("HNS_COOP_LOCAL_PORT");
+    bool armed = (join != NULL && join[0] == '1')
+        || (asHost != NULL && asHost[0] == '1')
+        || (localPort != NULL && localPort[0] != '\0');
+    if (!armed)
         return;
     if (sThreadStarted)
         return;
@@ -839,6 +939,16 @@ bool CoopNet_Poll(uint16_t *type, uint8_t *payload, uint32_t *len, uint32_t cap)
     return true;
 }
 
+#ifdef __ANDROID__
+JNIEXPORT void JNICALL
+Java_com_heartsoul_recomp_HeartSoulActivity_nativeCoopBackground(JNIEnv *env, jobject thiz, jboolean background)
+{
+    (void)env;
+    (void)thiz;
+    CoopNet_SetBackgrounded(background == JNI_TRUE);
+}
+#endif
+
 #else
 
 #include "platform/coop_net.h"
@@ -846,6 +956,8 @@ bool CoopNet_Poll(uint16_t *type, uint8_t *payload, uint32_t *len, uint32_t cap)
 #include <string.h>
 
 void CoopNet_Boot(void) {}
+void CoopNet_SetBackgrounded(bool background) { (void)background; }
+bool CoopNet_IsBackgrounded(void) { return false; }
 bool CoopNet_IsUp(void) { return false; }
 int CoopNet_Role(void) { return -1; }
 uint32_t CoopNet_PartnerAgeMs(void) { return 0xffffffffu; }
