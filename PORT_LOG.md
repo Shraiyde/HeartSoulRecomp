@@ -13,6 +13,27 @@ Rules for this log:
 
 ---
 
+## 2026-11-24, fullscreen touch layout
+
+State at end of session: `recomp-phone-2` (`108a25e9`) did contain the new
+`sdl2.c` (its `libmain.so` has the 4096-sample audio buffer). The picture
+was still a band because the window was then resized to the game aspect.
+Not played on a phone.
+
+### Done
+
+- Android no longer calls `SDL_SetWindowSize` with the game dimensions.
+  The window is the display, and the picture is scaled evenly at the top.
+  L, R, the D-pad, A, B, Select and Start are in the area below it.
+- Touches use `SDL_TouchFingerEvent` 0..1 times the renderer output size,
+  the same pixels the buttons are drawn in, and stay held until the finger lifts.
+
+### Next
+
+- Tag `recomp-phone-3` after the `port` compile is green.
+
+---
+
 ## 2026-11-23, phone controls and audio
 
 State at end of session: `recomp-phone-1` (`4017e2b982`) crackled and its

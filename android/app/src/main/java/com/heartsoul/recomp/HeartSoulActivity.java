@@ -179,6 +179,10 @@ public class HeartSoulActivity extends SDLActivity {
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);
+        // The native window is the whole display. Black instead of the
+        // default white in any margin around the picture.
+        if (getWindow() != null)
+            getWindow().getDecorView().setBackgroundColor(0xFF000000);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
         installSingleScreenAccess();
     }

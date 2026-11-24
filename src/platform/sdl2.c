@@ -167,8 +167,10 @@ void Platform_SetWidescreen(bool32 enabled)
 #endif
     gRenderWidth = DISPLAY_WIDTH + 2 * gRenderMargin;
     ApplyScaleMode();
+#ifndef __ANDROID__
     if (sdlWindow != NULL)
         SDL_SetWindowSize(sdlWindow, gRenderWidth * videoScale, gRenderHeight * videoScale);
+#endif
 }
 
 // Tall screen: HNS_TALL=1 adds 28 lines above and below, so with widescreen
@@ -184,8 +186,10 @@ void Platform_SetTallScreen(bool32 enabled)
 #endif
     gRenderHeight = DISPLAY_HEIGHT + 2 * gRenderMarginY;
     ApplyScaleMode();
+#ifndef __ANDROID__
     if (sdlWindow != NULL)
         SDL_SetWindowSize(sdlWindow, gRenderWidth * videoScale, gRenderHeight * videoScale);
+#endif
 }
 
 // Headless test mode, for running the game without a display or a person.
@@ -626,10 +630,26 @@ int main(int argc, char **argv)
     Platform_SetTallScreen(tall != NULL && strtoul(tall, NULL, 10) != 0);
 #endif
 
-    sdlWindow = SDL_CreateWindow("pokeemerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, gRenderWidth * videoScale, gRenderHeight * videoScale,
 #ifdef __ANDROID__
-                                 SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN);
+    {
+        SDL_DisplayMode display;
+        int windowW = gRenderWidth;
+        int windowH = gRenderHeight;
+
+        // The size passed here is the SurfaceView size. A game-sized window
+        // is a short band in the middle of the phone, and the controls then
+        // have nowhere to go except on top of the picture.
+        if (SDL_GetDesktopDisplayMode(0, &display) == 0 && display.w > 0 && display.h > 0)
+        {
+            windowW = display.w;
+            windowH = display.h;
+        }
+        sdlWindow = SDL_CreateWindow("pokeemerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                     windowW, windowH,
+                                     SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_ALLOW_HIGHDPI);
+    }
 #else
+    sdlWindow = SDL_CreateWindow("pokeemerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, gRenderWidth * videoScale, gRenderHeight * videoScale,
                                  SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 #endif
     if (sdlWindow == NULL)
@@ -765,7 +785,11 @@ int main(int argc, char **argv)
 
             if (videoScaleChanged)
             {
+#ifndef __ANDROID__
+                // On Android this shrinks the SurfaceView to the game aspect,
+                // which is why the picture sat in a band with the buttons on it.
                 SDL_SetWindowSize(sdlWindow, gRenderWidth * videoScale, gRenderHeight * videoScale);
+#endif
                 videoScaleChanged = false;
             }
         }
@@ -778,7 +802,9 @@ int main(int argc, char **argv)
             SDL_Rect frameRect = {0, 0, gRenderWidth, gRenderHeight};
 
             BuildTouchLayout(&layout);
+            SDL_RenderSetLogicalSize(sdlRenderer, 0, 0);
             SDL_RenderSetViewport(sdlRenderer, NULL);
+            SDL_RenderSetScale(sdlRenderer, 1.0f, 1.0f);
             SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
             SDL_RenderClear(sdlRenderer);
             SDL_RenderCopy(sdlRenderer, sdlTexture, &frameRect, &layout.game);
@@ -977,91 +1003,143 @@ static void TouchOutputSize(int *w, int *h)
         *h = gRenderHeight;
 }
 
+static void PlaceTouchRows(TouchLayout *layout, int left, int top, int right, int bottom)
+{
+    int w = right - left;
+    int bandH = bottom - top;
+    int rowH, btnH, btnW, face, reach, gap;
+
+    if (w < 8)
+        w = 8;
+    if (bandH < 12)
+        bandH = 12;
+    gap = bandH / 30;
+    if (gap < 2)
+        gap = 2;
+    top += gap;
+    bandH = bottom - top;
+    if (bandH < 12)
+        bandH = 12;
+    rowH = bandH / 3;
+    btnH = rowH * 72 / 100;
+    if (btnH < 8)
+        btnH = 8;
+    btnW = w * 22 / 100;
+    if (btnW < btnH)
+        btnW = btnH;
+    layout->l = (SDL_Rect){ left + w * 4 / 100, top + (rowH - btnH) / 2, btnW, btnH };
+    layout->r = (SDL_Rect){ right - w * 4 / 100 - btnW, top + (rowH - btnH) / 2, btnW, btnH };
+
+    reach = rowH * 40 / 100;
+    if (reach < 8)
+        reach = 8;
+    layout->dpadReach = reach;
+    layout->dpadCx = left + w * 24 / 100;
+    if (layout->dpadCx - reach < left)
+        layout->dpadCx = left + reach;
+    layout->dpadCy = top + rowH + rowH / 2;
+    if (layout->dpadCy - reach < top + rowH)
+        layout->dpadCy = top + rowH + reach;
+    if (layout->dpadCy + reach > top + rowH * 2)
+        layout->dpadCy = top + rowH * 2 - reach;
+
+    face = btnH;
+    if (face > w * 18 / 100)
+        face = w * 18 / 100;
+    if (face < 8)
+        face = 8;
+    layout->a = (SDL_Rect){ left + w * 82 / 100 - face / 2, layout->dpadCy - face / 2, face, face };
+    layout->b = (SDL_Rect){ left + w * 62 / 100 - face / 2, layout->dpadCy - face / 2, face, face };
+    if (layout->a.x + layout->a.w > right)
+        layout->a.x = right - layout->a.w;
+    if (layout->b.x < left)
+        layout->b.x = left;
+
+    {
+        int sw = w * 28 / 100;
+        int sh = btnH * 70 / 100;
+        int sy = top + rowH * 2 + (rowH - sh) / 2;
+
+        if (sh < 8)
+            sh = 8;
+        if (sy < top + rowH * 2)
+            sy = top + rowH * 2;
+        if (sy + sh > bottom)
+            sy = bottom - sh;
+        layout->selectBtn = (SDL_Rect){ left + w / 2 - sw - w / 40, sy, sw, sh };
+        layout->startBtn = (SDL_Rect){ left + w / 2 + w / 40, sy, sw, sh };
+    }
+}
+
 static void BuildTouchLayout(TouchLayout *layout)
 {
-    int w, h, band, gameMaxH, gw, gh;
-    int top, bandH, rowH, btnH, btnW, face, reach;
+    int w, h, gw, gh;
+    int topInset, controls, gameMaxW, gameMaxH;
 
     TouchOutputSize(&w, &h);
     memset(layout, 0, sizeof(*layout));
     layout->w = w;
     layout->h = h;
-    // The bottom of the screen is only buttons. The picture keeps its shape
-    // in whatever is left above them.
-    band = h * 42 / 100;
-    if (band < h / 3)
-        band = h / 3;
-    if (band > h * 55 / 100)
-        band = h * 55 / 100;
-    gameMaxH = h - band;
-    if (gameMaxH < 1)
-        gameMaxH = 1;
     gw = gRenderWidth > 0 ? gRenderWidth : 240;
     gh = gRenderHeight > 0 ? gRenderHeight : 160;
-    if ((long)w * gh <= (long)gameMaxH * gw)
+
+    if (h >= w)
     {
-        layout->game.w = w;
-        layout->game.h = (int)((long)w * gh / gw);
+        // Portrait. The top strip is the existing BOTTOM SCREEN button.
+        // The picture keeps its shape under that, and every control is
+        // below the picture.
+        topInset = h / 10;
+        controls = h * 46 / 100;
+        if (topInset + controls >= h)
+            controls = h - topInset - gh;
+        if (controls < h / 5)
+            controls = h / 5;
+        gameMaxH = h - topInset - controls;
+        gameMaxW = w;
+        if (gameMaxH < 1)
+            gameMaxH = 1;
+        if ((long)gameMaxW * gh <= (long)gameMaxH * gw)
+        {
+            layout->game.w = gameMaxW;
+            layout->game.h = (int)((long)gameMaxW * gh / gw);
+        }
+        else
+        {
+            layout->game.h = gameMaxH;
+            layout->game.w = (int)((long)gameMaxH * gw / gh);
+        }
+        if (layout->game.w < 1)
+            layout->game.w = 1;
+        if (layout->game.h < 1)
+            layout->game.h = 1;
+        layout->game.x = (w - layout->game.w) / 2;
+        layout->game.y = topInset + (gameMaxH - layout->game.h) / 2;
+        PlaceTouchRows(layout, 0, layout->game.y + layout->game.h, w, h);
     }
     else
     {
-        layout->game.h = gameMaxH;
-        layout->game.w = (int)((long)gameMaxH * gw / gh);
-    }
-    if (layout->game.w < 1)
-        layout->game.w = 1;
-    if (layout->game.h < 1)
-        layout->game.h = 1;
-    layout->game.x = (w - layout->game.w) / 2;
-    layout->game.y = 0;
-
-    top = layout->game.y + layout->game.h;
-    bandH = h - top;
-    if (bandH < 3)
-        bandH = 3;
-    rowH = bandH / 3;
-    btnH = rowH * 70 / 100;
-    if (btnH > w * 14 / 100)
-        btnH = w * 14 / 100;
-    if (btnH < 8)
-        btnH = 8;
-    btnW = w * 18 / 100;
-    if (btnW < btnH)
-        btnW = btnH;
-    layout->l = (SDL_Rect){ w * 6 / 100, top + (rowH - btnH) / 2, btnW, btnH };
-    layout->r = (SDL_Rect){ w - w * 6 / 100 - btnW, top + (rowH - btnH) / 2, btnW, btnH };
-
-    reach = rowH * 42 / 100;
-    if (reach < 12)
-        reach = 12;
-    layout->dpadReach = reach;
-    layout->dpadCx = w * 24 / 100;
-    if (layout->dpadCx < reach)
-        layout->dpadCx = reach;
-    layout->dpadCy = top + rowH + rowH / 2;
-    if (layout->dpadCy + reach > h)
-        layout->dpadCy = h - reach;
-
-    face = btnH;
-    if (face > w * 16 / 100)
-        face = w * 16 / 100;
-    if (face < 12)
-        face = 12;
-    layout->a = (SDL_Rect){ w * 84 / 100 - face / 2, layout->dpadCy - face / 2, face, face };
-    layout->b = (SDL_Rect){ w * 66 / 100 - face / 2, layout->dpadCy - face / 2 + face / 6, face, face };
-
-    {
-        int sw = w * 22 / 100;
-        int sh = btnH * 70 / 100;
-        int sy;
-
-        if (sh < 8)
-            sh = 8;
-        sy = top + rowH * 2 + (rowH - sh) / 2;
-        if (sy + sh > h)
-            sy = h - sh;
-        layout->selectBtn = (SDL_Rect){ w / 2 - sw - w / 80, sy, sw, sh };
-        layout->startBtn = (SDL_Rect){ w / 2 + w / 80, sy, sw, sh };
+        controls = w * 42 / 100;
+        gameMaxW = w - controls;
+        gameMaxH = h;
+        if (gameMaxW < 1)
+            gameMaxW = 1;
+        if ((long)gameMaxW * gh <= (long)gameMaxH * gw)
+        {
+            layout->game.w = gameMaxW;
+            layout->game.h = (int)((long)gameMaxW * gh / gw);
+        }
+        else
+        {
+            layout->game.h = gameMaxH;
+            layout->game.w = (int)((long)gameMaxH * gw / gh);
+        }
+        if (layout->game.w < 1)
+            layout->game.w = 1;
+        if (layout->game.h < 1)
+            layout->game.h = 1;
+        layout->game.x = 0;
+        layout->game.y = (h - layout->game.h) / 2;
+        PlaceTouchRows(layout, layout->game.x + layout->game.w, 0, w, h);
     }
 }
 
@@ -1124,12 +1202,19 @@ static void HandleTouchEvent(const SDL_TouchFingerEvent *finger, bool down)
     int ow = 0, oh = 0;
     int x, y;
 
-    // SDL reports the finger as 0..1 of the window. Hit rectangles are in
-    // renderer output pixels, which match that span. Mapping through the
-    // logical game rect put every touch outside 0..1, so the buttons did nothing.
+    // SDL_TouchFingerEvent x/y are 0..1 across the window. Rects are renderer
+    // output pixels. Multiply by the output size, not the letterboxed game.
     TouchOutputSize(&ow, &oh);
-    x = (int)(finger->x * ow);
-    y = (int)(finger->y * oh);
+    if (finger->x > 1.0f || finger->y > 1.0f)
+    {
+        x = (int)finger->x;
+        y = (int)finger->y;
+    }
+    else
+    {
+        x = (int)(finger->x * ow);
+        y = (int)(finger->y * oh);
+    }
 
     for (i = 0; i < (int)(sizeof(sTouchPoints) / sizeof(sTouchPoints[0])); i++) {
         if (sTouchPoints[i].active && sTouchPoints[i].id == finger->fingerId) {
