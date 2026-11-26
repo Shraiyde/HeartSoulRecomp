@@ -89,6 +89,7 @@ static EWRAM_DATA rng_value_t sRemoteBattleRng;
 static EWRAM_DATA rng_value_t sRemoteBattleRng2;
 static EWRAM_DATA u16 sRemoteBattleSeedEpoch;
 static EWRAM_DATA u16 sRemoteBattleSeedTurn;
+static EWRAM_DATA u32 sRemoteBattleChecksum;
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
@@ -683,7 +684,7 @@ static void HandleInbound(void)
                 sNewPeerSession = FALSE;
             }
         }
-        else if (type == COOP_MSG_BATTLE_SEED && len == 36)
+        else if (type == COOP_MSG_BATTLE_SEED && len == 40)
         {
             u16 epoch = ReadBe16(payload);
             u16 turn = ReadBe16(payload + 2);
@@ -700,6 +701,7 @@ static void HandleInbound(void)
                 sRemoteBattleRng2.b = ReadBe32(payload + 24);
                 sRemoteBattleRng2.c = ReadBe32(payload + 28);
                 sRemoteBattleRng2.ctr = ReadBe32(payload + 32);
+                sRemoteBattleChecksum = ReadBe32(payload + 36);
                 sRemoteBattleSeedReady = TRUE;
             }
         }
@@ -1649,9 +1651,50 @@ bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
     return TRUE;
 }
 
+static u32 HashBattleBytes(u32 hash, const void *data, u32 size)
+{
+    const u8 *bytes = data;
+    u32 i;
+    for (i = 0; i < size; i++)
+    {
+        hash ^= bytes[i];
+        hash *= 16777619;
+    }
+    return hash;
+}
+
+static u32 BattleStateChecksum(void)
+{
+    u32 hash = 2166136261u;
+    u32 i;
+    u8 hostBattler = CoopNet_Role() == 0 ? 0 : 1;
+    u8 guestBattler = CoopNet_Role() == 0 ? 1 : 0;
+
+    hash = HashBattleBytes(hash, &gBattleMons[hostBattler], sizeof(gBattleMons[hostBattler]));
+    hash = HashBattleBytes(hash, &gBattleMons[guestBattler], sizeof(gBattleMons[guestBattler]));
+    for (i = 2; i < gBattlersCount; i++)
+        hash = HashBattleBytes(hash, &gBattleMons[i], sizeof(gBattleMons[i]));
+    if (CoopNet_Role() == 0)
+    {
+        hash = HashBattleBytes(hash, &gPlayerParty[0], sizeof(struct Pokemon) * MULTI_PARTY_SIZE);
+        hash = HashBattleBytes(hash, &gPlayerParty[MULTI_PARTY_SIZE], sizeof(struct Pokemon) * MULTI_PARTY_SIZE);
+    }
+    else
+    {
+        hash = HashBattleBytes(hash, &gPlayerParty[MULTI_PARTY_SIZE], sizeof(struct Pokemon) * MULTI_PARTY_SIZE);
+        hash = HashBattleBytes(hash, &gPlayerParty[0], sizeof(struct Pokemon) * MULTI_PARTY_SIZE);
+    }
+    hash = HashBattleBytes(hash, gEnemyParty, sizeof(gEnemyParty));
+    hash = HashBattleBytes(hash, &gBattleWeather, sizeof(gBattleWeather));
+    hash = HashBattleBytes(hash, &gBattleTypeFlags, sizeof(gBattleTypeFlags));
+    hash = HashBattleBytes(hash, &gBattleOutcome, sizeof(gBattleOutcome));
+    hash = HashBattleBytes(hash, &gBattlersCount, sizeof(gBattlersCount));
+    return hash;
+}
+
 bool8 Coop_BattleSyncTurnStart(void)
 {
-    u8 wire[36];
+    u8 wire[40];
 
     if (!sInBattle || !CoopNet_IsUp())
         return FALSE;
@@ -1695,6 +1738,13 @@ bool8 Coop_BattleSyncTurnStart(void)
         wire[33] = (u8)(gRng2Value.ctr >> 16);
         wire[34] = (u8)(gRng2Value.ctr >> 8);
         wire[35] = (u8)gRng2Value.ctr;
+        {
+            u32 checksum = BattleStateChecksum();
+            wire[36] = (u8)(checksum >> 24);
+            wire[37] = (u8)(checksum >> 16);
+            wire[38] = (u8)(checksum >> 8);
+            wire[39] = (u8)checksum;
+        }
         if (!CoopNet_SendBytes(COOP_MSG_BATTLE_SEED, wire, sizeof(wire)))
             return FALSE;
         sBattleSeedSent = TRUE;
@@ -1706,6 +1756,13 @@ bool8 Coop_BattleSyncTurnStart(void)
     {
         if (sRemoteBattleSeedEpoch != sBattleEpoch || sRemoteBattleSeedTurn < sBattleTurn)
             sRemoteBattleSeedReady = FALSE;
+        return FALSE;
+    }
+    if (BattleStateChecksum() != sRemoteBattleChecksum)
+    {
+        sAbort = TRUE;
+        if (gBattleOutcome == 0)
+            gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
         return FALSE;
     }
     gRngValue = sRemoteBattleRng;
