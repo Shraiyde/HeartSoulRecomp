@@ -1517,3 +1517,22 @@ State at end of session: repo created, nothing built yet, no code changed.
   it. Duplicate events are acknowledged without being enqueued twice.
 - This is a source-level protocol audit. No compiler, CI result, or physical
   two-device test is available yet.
+
+
+## 2026-11-26: Audit battle snapshot bounds and remote action mapping
+
+- Traced the host/guest canonical battler and six-slot party mapping through
+  snapshot serialization and application. Guest snapshots swap the local
+  player halves and mirror the two active player battlers into the same
+  canonical order on both devices.
+- Checked every battle snapshot append/apply helper: appends are capped at
+  4,096 bytes, incoming copies check the remaining payload length, the
+  compile-time aggregate bound reserves four bytes for the final checksum,
+  and the receiver rejects wrong epoch, turn, battler count, or non-co-op
+  battle flags.
+- Confirmed remote switch actions map the sender's local party slot 0-2 into
+  the receiver's partner half 3-5 on either host or guest. Item consumption
+  remains owner-only in the battle action path.
+- No new source change was justified by this review. The remaining risk is
+  behavioral: these invariants still need an actual two-device battle covering
+  move targets, switches, items, status effects, and battle completion.
