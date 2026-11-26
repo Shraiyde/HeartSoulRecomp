@@ -17,6 +17,7 @@ struct CoopBattleAction
     u8 switchIndex;
     u8 movePosition;
     u16 moveTarget;
+    u32 rngSeed;
 };
 
 bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out);
