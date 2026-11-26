@@ -1633,6 +1633,11 @@ void Coop_FinishSharedBattle(void)
         gPlayerParty[i] = next[i];
     CalculatePlayerPartyCount();
     sPartySaved = FALSE;
+    sInBattle = FALSE;
+    sBattleHadLink = FALSE;
+    sBattleFinalSent = FALSE;
+    sRemoteBattleFinalReady = FALSE;
+    sBattleFinalWaitFrames = 0;
 }
 
 void Coop_OnBattleStarted(void)
