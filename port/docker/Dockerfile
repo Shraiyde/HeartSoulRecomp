@@ -9,6 +9,7 @@ RUN dpkg --add-architecture armhf && apt-get update && \
       build-essential git make pkg-config python3 ca-certificates \
       libpng-dev zlib1g-dev \
       gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
+      gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
       libsdl2-dev:armhf libc6:armhf libsdl2-dev gdb \
       qemu-user gdb-multiarch clang procps \
       gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi \
