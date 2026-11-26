@@ -8,6 +8,21 @@
 
 #ifdef PORTABLE
 
+struct CoopBattleAction
+{
+    u8 action;
+    u8 data1;
+    u8 data2;
+    u8 data3;
+    u8 switchIndex;
+    u8 movePosition;
+    u16 moveTarget;
+};
+
+bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out);
+bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action);
+void Coop_BattleTurnComplete(void);
+
 bool8 Coop_IsStorySyncReady(void);
 bool8 Coop_PartnersNearby(void);
 bool8 Coop_BlockTrainerApproach(void);
@@ -38,6 +53,20 @@ void Coop_DropSavedMon(struct Pokemon *mon);
 void Coop_FinishSharedBattle(void);
 
 #else
+
+struct CoopBattleAction
+{
+    u8 action;
+    u8 data1;
+    u8 data2;
+    u8 data3;
+    u8 switchIndex;
+    u8 movePosition;
+    u16 moveTarget;
+};
+static inline bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out) { (void)out; return FALSE; }
+static inline bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action) { (void)action; return FALSE; }
+static inline void Coop_BattleTurnComplete(void) {}
 
 static inline bool8 Coop_IsStorySyncReady(void) { return FALSE; }
 static inline bool8 Coop_PartnersNearby(void) { return FALSE; }
