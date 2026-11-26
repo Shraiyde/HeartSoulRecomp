@@ -14,6 +14,8 @@ source. The Android build and two-device path are still unverified.
   starts. `HeartSoulActivity` passes that port as
   `HNS_COOP_UDP_PORT`; the native guest sends its position datagrams to the
   relay instead of the unrelated TCP loopback endpoint.
+- The guest ZeroTier datagram socket binds to the same allowed game port as
+  the host, keeping return traffic within the ad-hoc network's port range.
 - Native UDP socket creation now uses the Java-provided relay port for guests.
   The existing TCP stream remains the reliable gameplay transport and
   automatic fallback when UDP cannot be established.
