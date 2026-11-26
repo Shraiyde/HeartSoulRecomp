@@ -13,12 +13,14 @@ static u8 sSendFrameCounter;
 static bool8 sRemoteSpawned;
 static u8 sRemoteMapNum;
 static u8 sRemoteMapGroup;
+static u16 sRemoteGraphicsId;
 
 static void RemoveRemoteAvatar(void)
 {
     if (sRemoteSpawned)
         RemoveObjectEventByLocalIdAndMap(COOP_REMOTE_LOCAL_ID, sRemoteMapNum, sRemoteMapGroup);
     sRemoteSpawned = FALSE;
+    sRemoteGraphicsId = 0;
 }
 
 void CoopPlayer_Disconnect(void)
@@ -80,13 +82,40 @@ void CoopPlayer_Update(void)
         sRemoteSpawned = TRUE;
         sRemoteMapNum = remote.mapNum;
         sRemoteMapGroup = remote.mapGroup;
+        sRemoteGraphicsId = remote.graphicsId;
     }
     else
     {
-        TryMoveObjectEventToMapCoords(COOP_REMOTE_LOCAL_ID, remote.mapNum,
-                                      remote.mapGroup, remote.x, remote.y);
-    }
+        struct ObjectEvent *objectEvent = &gObjectEvents[objectEventId];
+        s16 dx = remote.x - objectEvent->currentCoords.x;
+        s16 dy = remote.y - objectEvent->currentCoords.y;
 
-    if (remote.facing >= DIR_SOUTH && remote.facing <= DIR_EAST)
-        ObjectEventTurn(&gObjectEvents[objectEventId], remote.facing);
+        if (sRemoteGraphicsId != remote.graphicsId)
+        {
+            ObjectEventSetGraphicsId(objectEvent, remote.graphicsId);
+            sRemoteGraphicsId = remote.graphicsId;
+        }
+
+        /* Animate ordinary one-tile steps. Teleport only after a map seam,
+         * pause, or packet gap has left the avatar more than one tile away. */
+        if (!ObjectEventIsHeldMovementActive(objectEvent)
+            && ((dx == 0 && (dy == -1 || dy == 1))
+                || (dy == 0 && (dx == -1 || dx == 1))))
+        {
+            enum Direction direction = dx < 0 ? DIR_WEST
+                                     : dx > 0 ? DIR_EAST
+                                     : dy < 0 ? DIR_NORTH : DIR_SOUTH;
+            ObjectEventSetHeldMovement(objectEvent, GetWalkNormalMovementAction(direction));
+        }
+        else if (!ObjectEventIsHeldMovementActive(objectEvent) && (dx != 0 || dy != 0))
+        {
+            TryMoveObjectEventToMapCoords(COOP_REMOTE_LOCAL_ID, remote.mapNum,
+                                          remote.mapGroup, remote.x, remote.y);
+        }
+        else if (dx == 0 && dy == 0
+                 && remote.facing >= DIR_SOUTH && remote.facing <= DIR_EAST)
+        {
+            ObjectEventTurn(objectEvent, remote.facing);
+        }
+    }
 }
