@@ -805,6 +805,7 @@ static void RunSession(int fd, int localRole, bool isHost)
     uint64_t lastAck = 0;
     uint64_t lastReplay = 0;
 
+    ExpirePeerPinIfNeeded();
     if (isHost)
     {
         bool resume;
