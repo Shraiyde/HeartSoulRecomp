@@ -1,5 +1,26 @@
 # Port log
 
+## 2026-11-26, serialize ZeroTier socket operations
+
+### Changed
+
+- Both UDP relay directions now serialize libzt socket creation, connect,
+  receive, send, timeout configuration, and close through the same lock used
+  by the TCP bridge. This avoids concurrent libzt calls racing its shared
+  error state.
+- ZeroTier UDP receives use a 1 ms timeout while holding that lock; the local
+  loopback side keeps its independent 100 ms timeout. TCP I/O is therefore
+  not held behind a long UDP receive.
+- TCP listener setup and guest TCP connect operations now use that same lock.
+
+### Not verified
+
+- This concurrency change has not been built or exercised on Android.
+- A real two-phone UDP test is still required.
+
+---
+
+
 ## 2026-11-26, prevent shared-world queue overflow loss
 
 ### Changed
