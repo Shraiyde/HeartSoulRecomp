@@ -1700,6 +1700,10 @@ static u32 BattleStateChecksum(void)
     hash = HashBattleBytes(hash, &gBattleMons[guestBattler], sizeof(gBattleMons[guestBattler]));
     hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyOrders[hostBattler], sizeof(gBattleStruct->battlerPartyOrders[hostBattler]));
     hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyOrders[guestBattler], sizeof(gBattleStruct->battlerPartyOrders[guestBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyIndexes[hostBattler], sizeof(gBattleStruct->battlerPartyIndexes[hostBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyIndexes[guestBattler], sizeof(gBattleStruct->battlerPartyIndexes[guestBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->itemPartyIndex[hostBattler], sizeof(gBattleStruct->itemPartyIndex[hostBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->itemPartyIndex[guestBattler], sizeof(gBattleStruct->itemPartyIndex[guestBattler]));
     hash = HashBattleBytes(hash, &gBattleStruct->monToSwitchIntoId[hostBattler], sizeof(gBattleStruct->monToSwitchIntoId[hostBattler]));
     hash = HashBattleBytes(hash, &gBattleStruct->monToSwitchIntoId[guestBattler], sizeof(gBattleStruct->monToSwitchIntoId[guestBattler]));
     hash = HashBattleBytes(hash, &gBattleStruct->chosenMovePositions[hostBattler], sizeof(gBattleStruct->chosenMovePositions[hostBattler]));
@@ -1710,6 +1714,8 @@ static u32 BattleStateChecksum(void)
     {
         hash = HashBattleBytes(hash, &gBattleMons[i], sizeof(gBattleMons[i]));
         hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyOrders[i], sizeof(gBattleStruct->battlerPartyOrders[i]));
+        hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyIndexes[i], sizeof(gBattleStruct->battlerPartyIndexes[i]));
+        hash = HashBattleBytes(hash, &gBattleStruct->itemPartyIndex[i], sizeof(gBattleStruct->itemPartyIndex[i]));
         hash = HashBattleBytes(hash, &gBattleStruct->monToSwitchIntoId[i], sizeof(gBattleStruct->monToSwitchIntoId[i]));
         hash = HashBattleBytes(hash, &gBattleStruct->chosenMovePositions[i], sizeof(gBattleStruct->chosenMovePositions[i]));
         hash = HashBattleBytes(hash, &gBattleStruct->moveTarget[i], sizeof(gBattleStruct->moveTarget[i]));
