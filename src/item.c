@@ -1,4 +1,5 @@
 #include "global.h"
+#include "battle.h"
 #include "item.h"
 #include "berry.h"
 #include "pokeball.h"
@@ -425,6 +426,14 @@ static bool32 NONNULL BagPocket_RemoveItem(struct BagPocket *pocket, enum Item i
 
 bool32 RemoveBagItem(enum Item itemId, u16 count)
 {
+    /* The other phone simulates the partner's item action, but only the
+     * owning phone may consume that player's private bag inventory. */
+    if (gMain.inBattle
+        && (gBattleTypeFlags & BATTLE_TYPE_COOP)
+        && GetBattlerPosition(gBattlerAttacker) == B_POSITION_PLAYER_RIGHT
+        && itemId == gLastUsedItem)
+        return TRUE;
+
     if (GetItemPocket(itemId) >= POCKETS_COUNT || itemId == ITEM_NONE)
         return FALSE;
 
