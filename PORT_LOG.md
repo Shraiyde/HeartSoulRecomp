@@ -1481,3 +1481,9 @@ State at end of session: repo created, nothing built yet, no code changed.
   every operation is non-blocking.
 - Still source-reviewed only; Android compilation and two-device UDP tests
   remain outstanding.
+
+
+- Follow-up hardening: after its 4.5-second candidate window expires, that
+  unauthenticated source endpoint is quarantined for 30 seconds. This prevents
+  a continuous sender from immediately reacquiring the candidate slot on its
+  next datagram; a different legitimate endpoint can still authenticate.
