@@ -1235,3 +1235,15 @@ State at end of session: repo created, nothing built yet, no code changed.
 - The final wait is bounded at 60 seconds; failure enters the existing safe
   battle-abort/party-restore path rather than hanging indefinitely.
 - Still requires Android build and two-device validation.
+
+
+## 2026-11-26: Shared-battle action ownership and private inventory
+
+- Remote switch actions now translate the sender's local party slot (0-2) into
+  the partner's shared party slots (3-5).
+- Battle item actions are simulated by both peers, but the remote battler's
+  RemoveBagItem call is suppressed on the non-owning phone. The player who
+  selected the item consumes it from their own bag; the other phone mirrors
+  the battle effect without consuming its local inventory.
+- The reliable staging queue now holds 2,048 messages, matching the session
+  journal capacity, rather than the former 48-message staging limit.
