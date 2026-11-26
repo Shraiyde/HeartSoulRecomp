@@ -1,5 +1,33 @@
 # Port log
 
+## 2026-11-26, serialize ZeroTier node initialization
+
+### Changed
+
+- Audited every `ZeroTierNative` call in
+  `HeartSoulZeroTier.java` after the socket-lock pass.
+- Wrapped node initialization from storage, event-handler registration,
+  node start, network join, and assigned-address lookup in the shared
+  `ZT` lock. These operations previously ran outside the lock while relay
+  threads used the same libzt instance.
+- Existing socket creation, bind/connect, read/write, receive/send, readiness
+  checks, timeout configuration, and close paths were already serialized.
+
+### Verification
+
+- Source audit completed by inspecting every `ZeroTierNative` call in the
+  Java bridge. This is a source-level audit only; no Android build or device
+  test has run yet.
+
+### Next
+
+1. Let the branch-push Android CI compile this change and inspect failures.
+2. If CI passes, test two-device host/join, UDP HELLO/READY, movement, TCP
+   fallback, and disconnect/reconnect.
+3. Continue battle ownership and shared-world convergence tests.
+
+---
+
 ## 2026-11-26, serialize guest UDP socket cleanup
 
 ### Changed
