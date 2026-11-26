@@ -27,7 +27,7 @@
 #define COOP_MAX_FRAME  8192
 #define COOP_QUEUE      48
 #define COOP_RELIABLE_OUTBOX 2048
-#define COOP_PAY_MAX    2048
+#define COOP_PAY_MAX    4096
 #define COOP_MSG_ACK     0xFFFFu
 #define COOP_MSG_UDP_HELLO 39
 #define COOP_MSG_UDP_READY 40
