@@ -587,16 +587,13 @@ static bool HelloProofForId(const char *clientId, char *out, size_t cap)
 
 static bool VerifyHello(const char *line, char *clientIdOut, size_t clientIdCap)
 {
+    int version = 0;
     char clientId[20];
     char proof[80];
     char expected[80];
-    if (sscanf(line, "HELLO %d %19s %79s", &(int){0}, clientId, proof) != 3)
+    if (sscanf(line, "HELLO %d %19s %79s", &version, clientId, proof) != 3
+        || version != COOP_PHONE_PROTOCOL)
         return false;
-    {
-        int version = 0;
-        if (sscanf(line, "HELLO %d", &version) != 1 || version != COOP_PHONE_PROTOCOL)
-            return false;
-    }
     if (strlen(clientId) < 8 || !HelloProofForId(clientId, expected, sizeof(expected)))
         return false;
     if (strcmp(proof, expected) != 0 || clientIdCap <= strlen(clientId))
