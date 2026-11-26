@@ -1468,3 +1468,16 @@ State at end of session: repo created, nothing built yet, no code changed.
   journal capacity, rather than the former 48-message staging limit.
 
 - Phone protocol bumped to v6 after adding the canonical per-turn battle snapshot and final snapshot ACK/commit barrier; v5 clients are intentionally rejected.
+
+
+## 2026-11-26: UDP candidate reservation hardening
+
+- The host Android UDP relay now gives an unauthenticated endpoint a fixed
+  4.5-second authentication window. Continuous invalid datagrams no longer
+  refresh the candidate timeout and reserve the relay against the real guest.
+- Once the native protocol returns its authenticated UDP READY response, the
+  endpoint is pinned as before and uses the normal 4.5-second idle timeout.
+- Corrected the libzt locking comment: native calls are serialized, but not
+  every operation is non-blocking.
+- Still source-reviewed only; Android compilation and two-device UDP tests
+  remain outstanding.
