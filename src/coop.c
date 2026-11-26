@@ -656,6 +656,21 @@ static void HandleInbound(void)
             sPartnerMaxHp = (u16)(payload[16] | (payload[17] << 8));
             sPartnerLeadValid = sPartnerSpecies != SPECIES_NONE && sPartnerLevel != 0;
         }
+        else if (type == COOP_MSG_SESSION_RESET && len == 0)
+        {
+            sRemoteReady = FALSE;
+            sPartnerLeadValid = FALSE;
+            sPartnerPartyValid = FALSE;
+            sReadyBurst = 0;
+            sConfigAckWait = 0;
+            ResetScan();
+            if (sInBattle)
+            {
+                sAbort = TRUE;
+                if (gBattleOutcome == 0)
+                    gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+            }
+        }
         else if (type == COOP_MSG_BATTLE_SEED && len == 36)
         {
             u16 epoch = ReadBe16(payload);
