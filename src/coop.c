@@ -769,6 +769,24 @@ static void HandleInbound(void)
                 sRemoteBattleFinalReady = TRUE;
             }
         }
+        else if (type == COOP_MSG_BATTLE_FINAL_ACK && len == 8 && CoopNet_Role() == 0)
+        {
+            u16 epoch = ReadBe16(payload);
+            u16 turn = ReadBe16(payload + 2);
+            u32 checksum = ReadBe32(payload + 4);
+            if (sInBattle && epoch == sBattleEpoch && turn == sBattleTurn
+                && checksum == sBattleFinalChecksum && sBattleFinalSent)
+                sBattleFinalAcked = TRUE;
+        }
+        else if (type == COOP_MSG_BATTLE_FINAL_COMMIT && len == 8 && CoopNet_Role() == 1)
+        {
+            u16 epoch = ReadBe16(payload);
+            u16 turn = ReadBe16(payload + 2);
+            u32 checksum = ReadBe32(payload + 4);
+            if (sInBattle && sBattleFinalApplied && epoch == sBattleEpoch
+                && turn == sBattleTurn && checksum == sBattleFinalChecksum)
+                sBattleFinalCommitReady = TRUE;
+        }
         else if (type == COOP_MSG_BATTLE_SEED && len == 40)
         {
             u16 epoch = ReadBe16(payload);
