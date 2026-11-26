@@ -1734,7 +1734,7 @@ bool8 Coop_BattleSyncTurnStart(void)
             setup[0] = (u8)(sBattleEpoch >> 8);
             setup[1] = (u8)sBattleEpoch;
             setup[2] = gBattlersCount;
-            setup[3] = gEnemyPartyCount;
+            setup[3] = 0;
             setup[4] = (u8)(gBattleTypeFlags >> 24);
             setup[5] = (u8)(gBattleTypeFlags >> 16);
             setup[6] = (u8)(gBattleTypeFlags >> 8);
@@ -1816,7 +1816,6 @@ bool8 Coop_BattleSyncTurnStart(void)
             return FALSE;
         }
         gBattlersCount = sRemoteBattleSetup[2];
-        gEnemyPartyCount = sRemoteBattleSetup[3];
         gBattleTypeFlags = ReadBe32(sRemoteBattleSetup + 4);
         gBattleWeather = ReadBe32(sRemoteBattleSetup + 8);
         memcpy(gEnemyParty, sRemoteBattleSetup + offset, sizeof(gEnemyParty));
