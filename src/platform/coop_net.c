@@ -27,7 +27,9 @@
 #define COOP_MAX_FRAME  8192
 #define COOP_QUEUE      48
 #define COOP_RELIABLE_OUTBOX 2048
-#define COOP_OUT_QUEUE COOP_RELIABLE_OUTBOX
+/* Keep the producer-facing staging queue small. The reliable replay outbox
+ * is separate and retains sent messages until the peer ACKs them. */
+#define COOP_OUT_QUEUE 48
 #define COOP_PAY_MAX    4096
 #define COOP_MSG_ACK     0xFFFFu
 #define COOP_MSG_UDP_HELLO 39
