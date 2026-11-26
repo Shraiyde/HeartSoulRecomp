@@ -165,7 +165,6 @@ public class HeartSoulActivity extends SDLActivity {
             coopStarted = nativeCoopHost(7777);
             if (coopStarted) {
                 showCoopHostInfo();
-                handler.postDelayed(coopStatusPoll, 500);
             } else {
                 Toast.makeText(this, "Could not open co-op host socket", Toast.LENGTH_LONG).show();
             }
@@ -174,7 +173,6 @@ public class HeartSoulActivity extends SDLActivity {
             coopStarted = host != null && nativeCoopJoin(host, 7777);
             if (coopStarted) {
                 Toast.makeText(this, "Connecting to " + host + ":7777", Toast.LENGTH_LONG).show();
-                handler.postDelayed(coopStatusPoll, 500);
             } else {
                 Toast.makeText(this, "Could not start co-op connection", Toast.LENGTH_LONG).show();
             }
@@ -199,6 +197,8 @@ public class HeartSoulActivity extends SDLActivity {
         ticksUntilDisplayCheck = 0;
         handler.removeCallbacks(poll);
         handler.post(poll);
+        if (coopStarted)
+            handler.postDelayed(coopStatusPoll, 500);
     }
 
     @Override
@@ -206,6 +206,7 @@ public class HeartSoulActivity extends SDLActivity {
         resumed = false;
         handler.removeCallbacks(reclaimFocusLater);
         handler.removeCallbacks(poll);
+        handler.removeCallbacks(coopStatusPoll);
         dismissPresentation();
         super.onPause();
     }
