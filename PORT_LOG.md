@@ -1537,3 +1537,14 @@ State at end of session: repo created, nothing built yet, no code changed.
 - No new source change was justified by this review. The remaining risk is
   behavioral: these invariants still need an actual two-device battle covering
   move targets, switches, items, status effects, and battle completion.
+
+
+## 2026-11-26: Reject unsupported lobby ports
+
+- The lobby parser previously accepted any valid TCP port and exposed it in
+  the lobby model, but the join bridge always connects to the fixed native
+  co-op port 54555. A stale or malformed directory entry could therefore be
+  listed even though the app would silently join the wrong port.
+- The parser now accepts only the port this build actually listens on.
+- This is a defensive compatibility check; branch-push CI is compiling the
+  current branch, but the new Java change has not yet been verified by CI.
