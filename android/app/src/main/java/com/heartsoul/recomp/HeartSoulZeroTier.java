@@ -36,10 +36,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the game uses a ZeroTier ad-hoc network, which has no controller, no member
  * list and no member limit. It carries IPv6 TCP and UDP to the game's port.
  *
- * The game's own transport keeps using ordinary TCP sockets. This class only
- * carries those bytes across the ZeroTier network through loopback:
- *   host:  ZeroTier listener  -> 127.0.0.1:<game port>
- *   guest: 127.0.0.1:<random> -> ZeroTier connection to the host
+ * The native game uses ordinary loopback TCP and UDP sockets. This class
+ * relays both transports across the ZeroTier network:
+ *   host:  ZeroTier TCP/UDP -> 127.0.0.1:<game port>
+ *   guest: 127.0.0.1:<random> TCP/UDP -> ZeroTier host
  * The host publishes its ZeroTier IPv6 address to this project's lobby
  * directory. Guests browse Heart & Soul hosts there. The directory is
  * discovery only; gameplay remains peer-to-peer over ZeroTier.
