@@ -7,6 +7,7 @@ import android.util.Log;
 import com.zerotier.sockets.ZeroTierEventListener;
 import com.zerotier.sockets.ZeroTierNative;
 import com.zerotier.sockets.ZeroTierSocket;
+import com.zerotier.sockets.ZeroTierDatagramSocket;
 
 import java.io.File;
 import java.util.concurrent.Executors;
@@ -20,6 +21,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.SocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -30,7 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Embedded ZeroTier node (libzt) for online play. No separate ZeroTier app,
  * account, or manually created network is needed; the host shares its address:
  * the game uses a ZeroTier ad-hoc network, which has no controller, no member
- * list and no member limit. It carries only IPv6 TCP/UDP to the game's port.
+ * list and no member limit. It carries IPv6 TCP and UDP to the game's port.
  *
  * The game's own transport keeps using ordinary TCP sockets. This class only
  * carries those bytes across the ZeroTier network through loopback:
@@ -90,6 +94,8 @@ public final class HeartSoulZeroTier {
     private static volatile int hostGeneration = 0;
     private static volatile int joinGeneration = 0;
     private static ServerSocket joinListener;
+    private static DatagramSocket joinUdpLocal;
+    private static volatile int joinUdpPort;
     private static final AtomicInteger links = new AtomicInteger();
 
     private HeartSoulZeroTier() {}
@@ -233,6 +239,9 @@ public final class HeartSoulZeroTier {
     /** Accept ZeroTier connections on ztPort and forward each to the local game server. */
     public static boolean hostOpen(final int ztPort, final int localPort) {
         final int generation = ++hostGeneration;
+        Thread udpThread = new Thread(() -> hostUdpRelay(generation, ztPort, localPort), "heartsoul-zt-host-udp");
+        udpThread.setDaemon(true);
+        udpThread.start();
         Thread thread = new Thread(new Runnable() {
             @Override public void run() {
                 Generation live = new Generation() {
@@ -295,6 +304,55 @@ public final class HeartSoulZeroTier {
         hostGeneration++;
     }
 
+    /**
+     * UDP position relay. The host's native UDP socket is loopback:localPort;
+     * this relay carries datagrams between it and the peer's ZeroTier endpoint.
+     */
+    private static void hostUdpRelay(final int generation, final int ztPort, final int localPort) {
+        ZeroTierDatagramSocket zt = null;
+        DatagramSocket local = null;
+        SocketAddress peer = null;
+        Generation live = () -> hostGeneration == generation;
+        if (!awaitReady(live)) return;
+        try {
+            zt = new ZeroTierDatagramSocket(ztPort);
+            zt.setSoTimeout(100);
+            local = new DatagramSocket(0, LOOPBACK);
+            local.setSoTimeout(100);
+            byte[] buffer = new byte[2048];
+            while (live.current()) {
+                try {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    zt.receive(packet);
+                    peer = packet.getSocketAddress();
+                    byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
+                            packet.getOffset() + packet.getLength());
+                    local.send(new DatagramPacket(data, data.length, LOOPBACK, localPort));
+                } catch (SocketTimeoutException ignored) {
+                    // Check the generation and service the local side.
+                }
+                try {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    local.receive(packet);
+                    if (peer != null) {
+                        byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
+                                packet.getOffset() + packet.getLength());
+                        zt.send(new DatagramPacket(data, data.length, peer));
+                    }
+                } catch (SocketTimeoutException ignored) {
+                    // No game datagram this interval.
+                }
+            }
+        } catch (Exception error) {
+            if (live.current()) Log.w(TAG, "host UDP relay stopped", error);
+        } finally {
+            if (local != null) local.close();
+            if (zt != null) {
+                try { zt.close(); } catch (Exception ignored) {}
+            }
+        }
+    }
+
     // --------------------------------------------------------------- guest
 
     /**
@@ -313,7 +371,24 @@ public final class HeartSoulZeroTier {
             Log.e(TAG, "loopback listener failed", error);
             return 0;
         }
-        synchronized (LOCK) { joinListener = listener; }
+        final DatagramSocket udpLocal;
+        try {
+            udpLocal = new DatagramSocket(0, LOOPBACK);
+            udpLocal.setSoTimeout(100);
+        } catch (Exception error) {
+            try { listener.close(); } catch (Exception ignored) {}
+            Log.e(TAG, "loopback UDP relay socket failed", error);
+            return 0;
+        }
+        synchronized (LOCK) {
+            joinListener = listener;
+            joinUdpLocal = udpLocal;
+            joinUdpPort = udpLocal.getLocalPort();
+        }
+        Thread udpThread = new Thread(() -> joinUdpRelay(generation, remoteAddress, remotePort, udpLocal),
+                "heartsoul-zt-join-udp");
+        udpThread.setDaemon(true);
+        udpThread.start();
         Thread thread = new Thread(new Runnable() {
             @Override public void run() {
                 Generation live = new Generation() {
@@ -354,6 +429,59 @@ public final class HeartSoulZeroTier {
         return listener.getLocalPort();
     }
 
+    /** Loopback UDP port the native guest transport sends its position packets to. */
+    public static int joinUdpPort() {
+        return joinUdpPort;
+    }
+
+    private static void joinUdpRelay(final int generation, final String remoteAddress,
+                                     final int remotePort, final DatagramSocket local) {
+        ZeroTierDatagramSocket zt = null;
+        SocketAddress localPeer = null;
+        Generation live = () -> joinGeneration == generation;
+        if (!awaitReady(live)) {
+            local.close();
+            return;
+        }
+        try {
+            InetAddress remote = InetAddress.getByName(remoteAddress);
+            zt = new ZeroTierDatagramSocket();
+            zt.connect(remote, remotePort);
+            zt.setSoTimeout(100);
+            byte[] buffer = new byte[2048];
+            while (live.current() && !local.isClosed()) {
+                try {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    local.receive(packet);
+                    localPeer = packet.getSocketAddress();
+                    byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
+                            packet.getOffset() + packet.getLength());
+                    zt.send(new DatagramPacket(data, data.length, remote, remotePort));
+                } catch (SocketTimeoutException ignored) {
+                    // Check the generation and service the ZeroTier side.
+                }
+                try {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    zt.receive(packet);
+                    if (localPeer != null) {
+                        byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
+                                packet.getOffset() + packet.getLength());
+                        local.send(new DatagramPacket(data, data.length, localPeer));
+                    }
+                } catch (SocketTimeoutException ignored) {
+                    // No remote datagram this interval.
+                }
+            }
+        } catch (Exception error) {
+            if (live.current()) Log.w(TAG, "join UDP relay stopped", error);
+        } finally {
+            local.close();
+            if (zt != null) {
+                try { zt.close(); } catch (Exception ignored) {}
+            }
+        }
+    }
+
     public static void connectClose() {
         joinGeneration++;
         synchronized (LOCK) {
@@ -361,6 +489,11 @@ public final class HeartSoulZeroTier {
                 try { joinListener.close(); } catch (Exception ignored) {}
                 joinListener = null;
             }
+            if (joinUdpLocal != null) {
+                joinUdpLocal.close();
+                joinUdpLocal = null;
+            }
+            joinUdpPort = 0;
         }
     }
 
