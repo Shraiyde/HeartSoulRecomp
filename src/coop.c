@@ -90,6 +90,11 @@ static EWRAM_DATA rng_value_t sRemoteBattleRng2;
 static EWRAM_DATA u16 sRemoteBattleSeedEpoch;
 static EWRAM_DATA u16 sRemoteBattleSeedTurn;
 static EWRAM_DATA u32 sRemoteBattleChecksum;
+static EWRAM_DATA bool8 sBattleSetupApplied;
+static EWRAM_DATA bool8 sRemoteBattleSetupReady;
+static EWRAM_DATA u16 sRemoteBattleSetupEpoch;
+static EWRAM_DATA u16 sRemoteBattleSetupLen;
+static EWRAM_DATA u8 sRemoteBattleSetup[1024];
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
@@ -681,7 +686,21 @@ static void HandleInbound(void)
                 sRemoteBattleActionReady = FALSE;
                 sBattleSeedSent = FALSE;
                 sRemoteBattleSeedReady = FALSE;
+                sBattleSetupApplied = FALSE;
+                sRemoteBattleSetupReady = FALSE;
                 sNewPeerSession = FALSE;
+            }
+        }
+        else if (type == COOP_MSG_BATTLE_SETUP && len <= sizeof(sRemoteBattleSetup) && len >= 12)
+        {
+            u16 epoch = ReadBe16(payload);
+            if ((sInBattle && epoch == sBattleEpoch)
+                || (!sInBattle && epoch == (u16)(sBattleEpoch + 1)))
+            {
+                memcpy(sRemoteBattleSetup, payload, len);
+                sRemoteBattleSetupLen = (u16)len;
+                sRemoteBattleSetupEpoch = epoch;
+                sRemoteBattleSetupReady = TRUE;
             }
         }
         else if (type == COOP_MSG_BATTLE_SEED && len == 40)
@@ -1402,6 +1421,8 @@ void Coop_Frame(void)
             sRemoteBattleActionReady = FALSE;
             sBattleSeedSent = FALSE;
             sRemoteBattleSeedReady = FALSE;
+            sBattleSetupApplied = FALSE;
+            sRemoteBattleSetupReady = FALSE;
         }
         sReadyBurst = 0;
     }
@@ -1575,6 +1596,9 @@ void Coop_OnBattleStarted(void)
     sBattleSeedSent = FALSE;
     if (sRemoteBattleSeedEpoch != sBattleEpoch || sRemoteBattleSeedTurn != 0)
         sRemoteBattleSeedReady = FALSE;
+    sBattleSetupApplied = FALSE;
+    if (sRemoteBattleSetupEpoch != sBattleEpoch)
+        sRemoteBattleSetupReady = FALSE;
     memset(&sRemoteBattleAction, 0, sizeof(sRemoteBattleAction));
     sPartyCountBackup = gPlayerPartyCount;
     for (i = 0; i < PARTY_SIZE; i++)
@@ -1700,6 +1724,34 @@ bool8 Coop_BattleSyncTurnStart(void)
         return FALSE;
     if (CoopNet_Role() == 0)
     {
+        if (!sBattleSetupApplied)
+        {
+            u8 setup[1024];
+            u32 offset = 12;
+            u32 setupLen = 12 + sizeof(gEnemyParty) + 2 * sizeof(gBattleMons[0]);
+            if (setupLen > sizeof(setup))
+                return FALSE;
+            setup[0] = (u8)(sBattleEpoch >> 8);
+            setup[1] = (u8)sBattleEpoch;
+            setup[2] = gBattlersCount;
+            setup[3] = gEnemyPartyCount;
+            setup[4] = (u8)(gBattleTypeFlags >> 24);
+            setup[5] = (u8)(gBattleTypeFlags >> 16);
+            setup[6] = (u8)(gBattleTypeFlags >> 8);
+            setup[7] = (u8)gBattleTypeFlags;
+            setup[8] = (u8)(gBattleWeather >> 24);
+            setup[9] = (u8)(gBattleWeather >> 16);
+            setup[10] = (u8)(gBattleWeather >> 8);
+            setup[11] = (u8)gBattleWeather;
+            memcpy(setup + offset, gEnemyParty, sizeof(gEnemyParty));
+            offset += sizeof(gEnemyParty);
+            memcpy(setup + offset, &gBattleMons[2], sizeof(gBattleMons[0]));
+            offset += sizeof(gBattleMons[0]);
+            memcpy(setup + offset, &gBattleMons[3], sizeof(gBattleMons[0]));
+            if (!CoopNet_SendBytes(COOP_MSG_BATTLE_SETUP, setup, setupLen))
+                return FALSE;
+            sBattleSetupApplied = TRUE;
+        }
         if (sBattleSeedSent)
             return TRUE;
         wire[0] = (u8)(sBattleEpoch >> 8);
@@ -1749,6 +1801,31 @@ bool8 Coop_BattleSyncTurnStart(void)
             return FALSE;
         sBattleSeedSent = TRUE;
         return TRUE;
+    }
+    if (!sBattleSetupApplied)
+    {
+        u32 offset = 12;
+        u32 expectedLen = 12 + sizeof(gEnemyParty) + 2 * sizeof(gBattleMons[0]);
+        if (!sRemoteBattleSetupReady || sRemoteBattleSetupEpoch != sBattleEpoch)
+            return FALSE;
+        if (sRemoteBattleSetupLen != expectedLen)
+        {
+            sAbort = TRUE;
+            if (gBattleOutcome == 0)
+                gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+            return FALSE;
+        }
+        gBattlersCount = sRemoteBattleSetup[2];
+        gEnemyPartyCount = sRemoteBattleSetup[3];
+        gBattleTypeFlags = ReadBe32(sRemoteBattleSetup + 4);
+        gBattleWeather = ReadBe32(sRemoteBattleSetup + 8);
+        memcpy(gEnemyParty, sRemoteBattleSetup + offset, sizeof(gEnemyParty));
+        offset += sizeof(gEnemyParty);
+        memcpy(&gBattleMons[2], sRemoteBattleSetup + offset, sizeof(gBattleMons[0]));
+        offset += sizeof(gBattleMons[0]);
+        memcpy(&gBattleMons[3], sRemoteBattleSetup + offset, sizeof(gBattleMons[0]));
+        sBattleSetupApplied = TRUE;
+        sRemoteBattleSetupReady = FALSE;
     }
     if (!sRemoteBattleSeedReady)
         return FALSE;
