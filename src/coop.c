@@ -1725,6 +1725,50 @@ static u32 HashBattleBytes(u32 hash, const void *data, u32 size)
     return hash;
 }
 
+static u32 ComputeSaveIdentity(void)
+{
+    u32 hash = 2166136261u;
+    if (gSaveBlock2Ptr == NULL)
+        return 0;
+    hash = HashBattleBytes(hash, gSaveBlock2Ptr->playerName, sizeof(gSaveBlock2Ptr->playerName));
+    hash = HashBattleBytes(hash, &gSaveBlock2Ptr->playerGender, sizeof(gSaveBlock2Ptr->playerGender));
+    hash = HashBattleBytes(hash, gSaveBlock2Ptr->playerTrainerId, sizeof(gSaveBlock2Ptr->playerTrainerId));
+    hash = HashBattleBytes(hash, &gSaveBlock2Ptr->encryptionKey, sizeof(gSaveBlock2Ptr->encryptionKey));
+    return hash != 0 ? hash : 1;
+}
+
+static void PublishSaveIdentity(void)
+{
+    u8 wire[4];
+    u32 identity = ComputeSaveIdentity();
+
+    if (identity == 0)
+        return;
+    if (!sHaveLocalSaveIdentity)
+    {
+        sLocalSaveIdentity = identity;
+        sHaveLocalSaveIdentity = TRUE;
+    }
+    else if (sLocalSaveIdentity != identity)
+    {
+        sLocalSaveIdentity = identity;
+        ResetGameSession(TRUE);
+    }
+
+    if (!sSaveIdentitySent || ++sSaveIdentityTimer >= 180)
+    {
+        wire[0] = (u8)(identity >> 24);
+        wire[1] = (u8)(identity >> 16);
+        wire[2] = (u8)(identity >> 8);
+        wire[3] = (u8)identity;
+        if (CoopNet_SendBytes(COOP_MSG_SAVE_ID, wire, sizeof(wire)))
+        {
+            sSaveIdentitySent = TRUE;
+            sSaveIdentityTimer = 0;
+        }
+    }
+}
+
 static u32 BattleStateChecksum(void)
 {
     u32 hash = 2166136261u;
