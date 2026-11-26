@@ -445,7 +445,8 @@ public final class HeartSoulZeroTier {
         }
         try {
             InetAddress remote = InetAddress.getByName(remoteAddress);
-            zt = new ZeroTierDatagramSocket();
+            // Keep both UDP source and destination on the network's allowed game port.
+            zt = new ZeroTierDatagramSocket(remotePort);
             zt.connect(remote, remotePort);
             zt.setSoTimeout(100);
             byte[] buffer = new byte[2048];
