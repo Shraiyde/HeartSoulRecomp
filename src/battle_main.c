@@ -185,6 +185,8 @@ EWRAM_DATA u8 gAbsentBattlerFlags = 0;
 EWRAM_DATA u8 gMultiHitCounter = 0;
 EWRAM_DATA const u8 *gBattlescriptCurrInstr = NULL;
 EWRAM_DATA u8 gChosenActionByBattler[MAX_BATTLERS_COUNT] = {0};
+EWRAM_DATA static struct CoopBattleAction sCoopRemoteAction[MAX_BATTLERS_COUNT] = {0};
+EWRAM_DATA static bool8 sCoopRemoteActionReady[MAX_BATTLERS_COUNT] = {0};
 EWRAM_DATA const u8 *gSelectionBattleScripts[MAX_BATTLERS_COUNT] = {NULL};
 EWRAM_DATA const u8 *gPalaceSelectionBattleScripts[MAX_BATTLERS_COUNT] = {NULL};
 EWRAM_DATA u16 gLastPrintedMoves[MAX_BATTLERS_COUNT] = {0};
@@ -545,6 +547,11 @@ void CB2_InitBattle(void)
     if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
         gBattleTypeFlags &= ~(BATTLE_TYPE_COOP | BATTLE_TYPE_LINK);
     Coop_OnBattleStarted();
+    if (gBattleTypeFlags & BATTLE_TYPE_COOP)
+    {
+        memset(sCoopRemoteAction, 0, sizeof(sCoopRemoteAction));
+        memset(sCoopRemoteActionReady, 0, sizeof(sCoopRemoteActionReady));
+    }
 #endif
     if (!gTestRunnerEnabled)
         MoveSaveBlocks_ResetHeap();
@@ -4433,8 +4440,19 @@ static void HandleTurnActionSelectionState(void)
                     else
                     {
                         gBattleStruct->itemPartyIndex[battler] = PARTY_SIZE;
-                        BtlController_EmitChooseAction(battler, B_COMM_TO_CONTROLLER, gChosenActionByBattler[0], gBattleResources->bufferB[0][1] | (gBattleResources->bufferB[0][2] << 8));
-                        MarkBattlerForControllerExec(battler);
+                        if ((gBattleTypeFlags & BATTLE_TYPE_COOP) && position == B_POSITION_PLAYER_RIGHT)
+                        {
+                            if (!sCoopRemoteActionReady[battler]
+                                && !Coop_BattleTakeRemoteAction(&sCoopRemoteAction[battler]))
+                                break;
+                            sCoopRemoteActionReady[battler] = TRUE;
+                            gBattleResources->bufferB[battler][1] = sCoopRemoteAction[battler].action;
+                        }
+                        else
+                        {
+                            BtlController_EmitChooseAction(battler, B_COMM_TO_CONTROLLER, gChosenActionByBattler[0], gBattleResources->bufferB[0][1] | (gBattleResources->bufferB[0][2] << 8));
+                            MarkBattlerForControllerExec(battler);
+                        }
                         gBattleCommunication[battler]++;
                     }
                 }
@@ -4491,8 +4509,19 @@ static void HandleTurnActionSelectionState(void)
                                                             i);
                         }
 
-                        BtlController_EmitChooseMove(battler, B_COMM_TO_CONTROLLER, IsDoubleBattle() != 0, FALSE, &moveInfo);
-                        MarkBattlerForControllerExec(battler);
+                        if ((gBattleTypeFlags & BATTLE_TYPE_COOP)
+                            && GetBattlerPosition(battler) == B_POSITION_PLAYER_RIGHT
+                            && sCoopRemoteActionReady[battler])
+                        {
+                            gBattleResources->bufferB[battler][2] = sCoopRemoteAction[battler].data2;
+                            gBattleResources->bufferB[battler][3] = sCoopRemoteAction[battler].data3;
+                            sCoopRemoteActionReady[battler] = FALSE;
+                        }
+                        else
+                        {
+                            BtlController_EmitChooseMove(battler, B_COMM_TO_CONTROLLER, IsDoubleBattle() != 0, FALSE, &moveInfo);
+                            MarkBattlerForControllerExec(battler);
+                        }
                     }
                     break;
                 case B_ACTION_USE_ITEM:
@@ -4523,8 +4552,20 @@ static void HandleTurnActionSelectionState(void)
                     }
                     else
                     {
-                        BtlController_EmitChooseItem(battler, B_COMM_TO_CONTROLLER, gBattleStruct->battlerPartyOrders[battler]);
-                        MarkBattlerForControllerExec(battler);
+                        if ((gBattleTypeFlags & BATTLE_TYPE_COOP)
+                            && GetBattlerPosition(battler) == B_POSITION_PLAYER_RIGHT
+                            && sCoopRemoteActionReady[battler])
+                        {
+                            gBattleResources->bufferB[battler][1] = sCoopRemoteAction[battler].data1;
+                            gBattleResources->bufferB[battler][2] = sCoopRemoteAction[battler].data2;
+                            gBattleResources->bufferB[battler][3] = sCoopRemoteAction[battler].data3;
+                            sCoopRemoteActionReady[battler] = FALSE;
+                        }
+                        else
+                        {
+                            BtlController_EmitChooseItem(battler, B_COMM_TO_CONTROLLER, gBattleStruct->battlerPartyOrders[battler]);
+                            MarkBattlerForControllerExec(battler);
+                        }
                     }
                     break;
                 case B_ACTION_SWITCH:
@@ -4539,6 +4580,14 @@ static void HandleTurnActionSelectionState(void)
                     {
                         BtlController_EmitChoosePokemon(battler, B_COMM_TO_CONTROLLER, PARTY_ACTION_ABILITY_PREVENTS, PARTY_SIZE, gBattleMons[i - 1].ability, i - 1, gBattleStruct->battlerPartyOrders[battler]);
                     }
+                    else if ((gBattleTypeFlags & BATTLE_TYPE_COOP)
+                        && GetBattlerPosition(battler) == B_POSITION_PLAYER_RIGHT
+                        && sCoopRemoteActionReady[battler])
+                    {
+                        gBattleResources->bufferB[battler][1] = sCoopRemoteAction[battler].switchIndex;
+                        gBattleStruct->monToSwitchIntoId[battler] = sCoopRemoteAction[battler].switchIndex;
+                        sCoopRemoteActionReady[battler] = FALSE;
+                    }
                     else
                     {
                         if (battler == 2 && gChosenActionByBattler[0] == B_ACTION_SWITCH)
@@ -4547,8 +4596,8 @@ static void HandleTurnActionSelectionState(void)
                             BtlController_EmitChoosePokemon(battler, B_COMM_TO_CONTROLLER, PARTY_ACTION_CHOOSE_MON, gBattleStruct->monToSwitchIntoId[1], ABILITY_NONE, 0, gBattleStruct->battlerPartyOrders[battler]);
                         else
                             BtlController_EmitChoosePokemon(battler, B_COMM_TO_CONTROLLER, PARTY_ACTION_CHOOSE_MON, PARTY_SIZE, ABILITY_NONE, 0, gBattleStruct->battlerPartyOrders[battler]);
+                        MarkBattlerForControllerExec(battler);
                     }
-                    MarkBattlerForControllerExec(battler);
                     break;
                 case B_ACTION_SAFARI_BALL:
                     if (IsPlayerPartyAndPokemonStorageFull())
@@ -4799,6 +4848,19 @@ static void HandleTurnActionSelectionState(void)
             }
             break;
         case STATE_WAIT_ACTION_CONFIRMED_STANDBY:
+            if ((gBattleTypeFlags & BATTLE_TYPE_COOP)
+                && position == B_POSITION_PLAYER_LEFT)
+            {
+                struct CoopBattleAction action;
+                action.action = gChosenActionByBattler[battler];
+                action.data1 = gBattleResources->bufferB[battler][1];
+                action.data2 = gBattleResources->bufferB[battler][2];
+                action.data3 = gBattleResources->bufferB[battler][3];
+                action.switchIndex = gBattleStruct->monToSwitchIntoId[battler];
+                action.movePosition = gBattleStruct->chosenMovePositions[battler];
+                action.moveTarget = gBattleStruct->moveTarget[battler];
+                Coop_BattleSendLocalAction(&action);
+            }
             if (!IsBattleControllerActiveOrPendingSyncAnywhere(battler))
             {
                 if (AllAtActionConfirmed())
@@ -4899,6 +4961,8 @@ static void HandleTurnActionSelectionState(void)
                 gChosenActionByBattler[GetBattlerAtPosition(B_POSITION_PLAYER_LEFT)] = B_ACTION_NOTHING_FAINTED;
         }
 
+        if (gBattleTypeFlags & BATTLE_TYPE_COOP)
+            Coop_BattleTurnComplete();
         gBattleMainFunc = SetActionsAndBattlersTurnOrder;
 
         if (gBattleTypeFlags & BATTLE_TYPE_INGAME_PARTNER)
