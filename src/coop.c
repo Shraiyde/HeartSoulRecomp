@@ -750,6 +750,19 @@ static void HandleInbound(void)
                 sRemoteBattleSetupReady = TRUE;
             }
         }
+        else if (type == COOP_MSG_BATTLE_FINAL && len >= 18 && len <= sizeof(sRemoteBattleFinal))
+        {
+            u16 epoch = ReadBe16(payload);
+            u16 turn = ReadBe16(payload + 2);
+            if (sInBattle && epoch == sBattleEpoch && turn == sBattleTurn)
+            {
+                memcpy(sRemoteBattleFinal, payload, len);
+                sRemoteBattleFinalLen = (u16)len;
+                sRemoteBattleFinalEpoch = epoch;
+                sRemoteBattleFinalTurn = turn;
+                sRemoteBattleFinalReady = TRUE;
+            }
+        }
         else if (type == COOP_MSG_BATTLE_SEED && len == 40)
         {
             u16 epoch = ReadBe16(payload);
