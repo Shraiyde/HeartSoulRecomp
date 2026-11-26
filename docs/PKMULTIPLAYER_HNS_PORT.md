@@ -209,16 +209,20 @@ PkMultiplayer transport behaviour.
 
 ## Current phone protocol
 
-The Android phone-to-phone handshake now advertises protocol version 6.
+The Android phone-to-phone handshake advertises protocol version 6.
 Both peers authenticate persistent device identity and process-session
 identity with HMAC proofs. Receive watermarks allow same-process reconnects to
 resume and replay unacknowledged events; a restarted process begins a clean
 session. Save fingerprints are pinned at the game layer, and the device pin is
 released after the 60-second reconnect window so a new partner can join.
 The independent UDP movement channel uses AES-GCM and authenticates the
-peer's session/device IDs before accepting its endpoint. The Windows PC-host
-handshake remains on its legacy protocol. Both phones must use the same
-protocol-v5 build. No Android build or two-device test has yet been verified.
+peer's session/device IDs before accepting its endpoint. Android now relays
+that UDP channel through explicit IPv6 ZeroTier datagram sockets and loopback
+UDP sockets; the guest binds its ZeroTier side to the same allowed game port.
+If UDP setup fails, TCP position updates remain the fallback. The Windows
+PC-host handshake remains on its legacy protocol. Both phones must use the
+same protocol-v6 build. No Android build or two-device test has yet been
+verified.
 
 ## Reference source
 
