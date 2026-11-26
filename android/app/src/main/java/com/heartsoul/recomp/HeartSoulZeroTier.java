@@ -336,8 +336,10 @@ public final class HeartSoulZeroTier {
         DatagramSocket local = null;
         SocketAddress peer = null;
         SocketAddress candidatePeer = null;
+        SocketAddress rejectedCandidate = null;
         boolean peerPinned = false;
         long candidateSinceMs = 0;
+        long rejectedCandidateUntilMs = 0;
         long lastPeerPacketMs = 0;
         Generation live = () -> hostGeneration == generation;
         if (!awaitReady(live)) return;
@@ -357,18 +359,25 @@ public final class HeartSoulZeroTier {
                     candidatePeer = null;
                     peerPinned = false;
                 } else if (!peerPinned && candidatePeer != null && now - candidateSinceMs > 4500) {
-                    // Use a fixed candidate window, not inactivity: an
-                    // unauthenticated sender must not hold the endpoint by
-                    // continuously sending invalid packets.
+                    // Use a fixed candidate window, not inactivity. Quarantine
+                    // the failed endpoint so its next packet cannot immediately
+                    // reacquire the candidate slot.
+                    rejectedCandidate = candidatePeer;
+                    rejectedCandidateUntilMs = now + 30000;
                     candidatePeer = null;
                     candidateSinceMs = 0;
+                }
+                if (rejectedCandidate != null && now >= rejectedCandidateUntilMs) {
+                    rejectedCandidate = null;
+                    rejectedCandidateUntilMs = 0;
                 }
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     synchronized (ZT) { zt.receive(packet); }
                     SocketAddress source = packet.getSocketAddress();
                     if (peerPinned ? peer.equals(source)
-                            : (candidatePeer == null || candidatePeer.equals(source))) {
+                            : (!source.equals(rejectedCandidate)
+                                    && (candidatePeer == null || candidatePeer.equals(source)))) {
                         // Hold one candidate endpoint during the authenticated
                         // UDP hello. Other senders cannot redirect the reply.
                         if (!peerPinned && candidatePeer == null) {
@@ -399,6 +408,8 @@ public final class HeartSoulZeroTier {
                             peer = target;
                             peerPinned = true;
                             candidateSinceMs = 0;
+                            rejectedCandidate = null;
+                            rejectedCandidateUntilMs = 0;
                             lastPeerPacketMs = System.currentTimeMillis();
                         }
                     }
