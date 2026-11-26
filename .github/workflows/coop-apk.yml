@@ -10,6 +10,7 @@ on:
       - port
       - cursor/native-coop-cf76
       - coop/direct-phone-host
+      - coop/pkmultiplayer-hns-adapter
     tags:
       - recomp-coop-1
       - recomp-phone-1
