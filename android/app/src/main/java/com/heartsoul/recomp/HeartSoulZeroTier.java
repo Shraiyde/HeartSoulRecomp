@@ -145,11 +145,16 @@ public final class HeartSoulZeroTier {
                 fail("ZeroTier storage could not be created.");
                 return;
             }
-            ZeroTierNative.zts_init_from_storage(storage.getAbsolutePath());
-            ZeroTierNative.zts_init_set_event_handler(new ZeroTierEventListener() {
-                @Override public void onZeroTierEvent(long eventId, int code) { onEvent(code); }
-            });
-            int error = ZeroTierNative.zts_node_start();
+            synchronized (ZT) {
+                ZeroTierNative.zts_init_from_storage(storage.getAbsolutePath());
+            }
+            synchronized (ZT) {
+                ZeroTierNative.zts_init_set_event_handler(new ZeroTierEventListener() {
+                    @Override public void onZeroTierEvent(long eventId, int code) { onEvent(code); }
+                });
+            }
+            int error;
+            synchronized (ZT) { error = ZeroTierNative.zts_node_start(); }
             if (error != ZeroTierNative.ZTS_ERR_OK) {
                 fail("ZeroTier could not start (" + error + ").");
                 return;
@@ -159,12 +164,13 @@ public final class HeartSoulZeroTier {
                 return;
             }
             state = "joining";
-            ZeroTierNative.zts_net_join(id);
+            synchronized (ZT) { ZeroTierNative.zts_net_join(id); }
             if (!await(NETWORK_TIMEOUT_MS, true)) {
                 if (!"error".equals(state)) fail("The multiplayer network did not respond.");
                 return;
             }
-            String assigned = ZeroTierNative.zts_addr_get_str(id, ZeroTierNative.ZTS_AF_INET6);
+            String assigned;
+            synchronized (ZT) { assigned = ZeroTierNative.zts_addr_get_str(id, ZeroTierNative.ZTS_AF_INET6); }
             if (assigned == null || assigned.isEmpty()) {
                 fail("The multiplayer network did not assign an address.");
                 return;
