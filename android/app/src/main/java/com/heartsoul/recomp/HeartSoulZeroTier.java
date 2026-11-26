@@ -371,24 +371,25 @@ public final class HeartSoulZeroTier {
             Log.e(TAG, "loopback listener failed", error);
             return 0;
         }
-        final DatagramSocket udpLocal;
+        DatagramSocket udpCandidate = null;
         try {
-            udpLocal = new DatagramSocket(0, LOOPBACK);
-            udpLocal.setSoTimeout(100);
+            udpCandidate = new DatagramSocket(0, LOOPBACK);
+            udpCandidate.setSoTimeout(100);
         } catch (Exception error) {
-            try { listener.close(); } catch (Exception ignored) {}
-            Log.e(TAG, "loopback UDP relay socket failed", error);
-            return 0;
+            Log.w(TAG, "loopback UDP relay unavailable; using TCP positions", error);
         }
+        final DatagramSocket udpLocal = udpCandidate;
         synchronized (LOCK) {
             joinListener = listener;
             joinUdpLocal = udpLocal;
-            joinUdpPort = udpLocal.getLocalPort();
+            joinUdpPort = udpLocal == null ? 0 : udpLocal.getLocalPort();
         }
-        Thread udpThread = new Thread(() -> joinUdpRelay(generation, remoteAddress, remotePort, udpLocal),
-                "heartsoul-zt-join-udp");
-        udpThread.setDaemon(true);
-        udpThread.start();
+        if (udpLocal != null) {
+            Thread udpThread = new Thread(() -> joinUdpRelay(generation, remoteAddress, remotePort, udpLocal),
+                    "heartsoul-zt-join-udp");
+            udpThread.setDaemon(true);
+            udpThread.start();
+        }
         Thread thread = new Thread(new Runnable() {
             @Override public void run() {
                 Generation live = new Generation() {
