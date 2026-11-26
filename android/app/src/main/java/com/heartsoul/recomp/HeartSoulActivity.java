@@ -1,6 +1,7 @@
 package com.heartsoul.recomp;
 
 import android.app.ActivityOptions;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Point;
@@ -9,6 +10,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Display;
+import android.widget.Toast;
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
 
 import org.libsdl.app.SDLActivity;
 
@@ -29,6 +36,31 @@ public class HeartSoulActivity extends SDLActivity {
     private static final int DISPLAY_CHECK_TICKS = 10; // look for a display once a second
 
     private static boolean running;
+
+    private static native boolean nativeCoopHost(int port);
+    private static native boolean nativeCoopJoin(String address, int port);
+    private static native int nativeCoopState();
+    private static native void nativeCoopStop();
+
+    private boolean coopStarted;
+    private boolean coopHostMode;
+    private final Runnable coopStatusPoll = new Runnable() {
+        @Override
+        public void run() {
+            if (!coopStarted)
+                return;
+            int state = nativeCoopState();
+            if (state == 3) {
+                Toast.makeText(HeartSoulActivity.this, "Co-op partner connected", Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (!coopHostMode && state == 0) {
+                Toast.makeText(HeartSoulActivity.this, "Co-op connection failed or timed out", Toast.LENGTH_LONG).show();
+                return;
+            }
+            handler.postDelayed(this, 500);
+        }
+    };
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private BottomScreenPresentation presentation;
@@ -127,6 +159,26 @@ public class HeartSoulActivity extends SDLActivity {
         bottomScreenEnabled = settings.bottomScreen;
         running = true;
         super.onCreate(savedInstanceState);
+        String coopMode = getIntent().getStringExtra("coop_mode");
+        if ("host".equals(coopMode)) {
+            coopHostMode = true;
+            coopStarted = nativeCoopHost(7777);
+            if (coopStarted) {
+                showCoopHostInfo();
+                handler.postDelayed(coopStatusPoll, 500);
+            } else {
+                Toast.makeText(this, "Could not open co-op host socket", Toast.LENGTH_LONG).show();
+            }
+        } else if ("join".equals(coopMode)) {
+            String host = getIntent().getStringExtra("coop_host");
+            coopStarted = host != null && nativeCoopJoin(host, 7777);
+            if (coopStarted) {
+                Toast.makeText(this, "Connecting to " + host + ":7777", Toast.LENGTH_LONG).show();
+                handler.postDelayed(coopStatusPoll, 500);
+            } else {
+                Toast.makeText(this, "Could not start co-op connection", Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
     @Override
@@ -173,8 +225,48 @@ public class HeartSoulActivity extends SDLActivity {
         handler.removeCallbacks(poll);
         dismissPresentation();
         BottomScreenActivity.finishCurrent();
+        handler.removeCallbacks(coopStatusPoll);
+        if (coopStarted) {
+            nativeCoopStop();
+            coopStarted = false;
+        }
         running = false;
         super.onDestroy();
+    }
+
+    private void showCoopHostInfo() {
+        StringBuilder addresses = new StringBuilder();
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces != null && interfaces.hasMoreElements()) {
+                NetworkInterface network = interfaces.nextElement();
+                if (!network.isUp() || network.isLoopback())
+                    continue;
+                Enumeration<InetAddress> candidates = network.getInetAddresses();
+                while (candidates.hasMoreElements()) {
+                    InetAddress address = candidates.nextElement();
+                    if (address instanceof Inet4Address
+                            && !address.isLoopbackAddress()
+                            && !address.isLinkLocalAddress()) {
+                        if (addresses.length() > 0)
+                            addresses.append("\n");
+                        addresses.append(network.getDisplayName())
+                                .append(": ")
+                                .append(address.getHostAddress());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "could not enumerate network addresses", e);
+        }
+        if (addresses.length() == 0)
+            addresses.append("No LAN/VPN IPv4 address found. Connect both devices to the same private network.");
+        new AlertDialog.Builder(this)
+                .setTitle("Co-op host ready")
+                .setMessage("Give your partner one of these addresses. UDP port 7777. Both devices must share a LAN or private VPN network.\n\n"
+                        + addresses)
+                .setPositiveButton("OK", null)
+                .show();
     }
 
     private void showBottomScreen() {
