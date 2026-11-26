@@ -68,6 +68,7 @@ struct CoopBattleAction
 };
 static inline bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out) { (void)out; return FALSE; }
 static inline bool8 Coop_BattleSyncTurnStart(void) { return FALSE; }
+static inline bool8 Coop_BattleSyncFinalState(void) { return TRUE; }
 static inline bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action) { (void)action; return FALSE; }
 static inline void Coop_BattleTurnComplete(void) {}
 
