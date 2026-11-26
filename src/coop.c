@@ -1698,8 +1698,22 @@ static u32 BattleStateChecksum(void)
 
     hash = HashBattleBytes(hash, &gBattleMons[hostBattler], sizeof(gBattleMons[hostBattler]));
     hash = HashBattleBytes(hash, &gBattleMons[guestBattler], sizeof(gBattleMons[guestBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyOrders[hostBattler], sizeof(gBattleStruct->battlerPartyOrders[hostBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyOrders[guestBattler], sizeof(gBattleStruct->battlerPartyOrders[guestBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->monToSwitchIntoId[hostBattler], sizeof(gBattleStruct->monToSwitchIntoId[hostBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->monToSwitchIntoId[guestBattler], sizeof(gBattleStruct->monToSwitchIntoId[guestBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->chosenMovePositions[hostBattler], sizeof(gBattleStruct->chosenMovePositions[hostBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->chosenMovePositions[guestBattler], sizeof(gBattleStruct->chosenMovePositions[guestBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->moveTarget[hostBattler], sizeof(gBattleStruct->moveTarget[hostBattler]));
+    hash = HashBattleBytes(hash, &gBattleStruct->moveTarget[guestBattler], sizeof(gBattleStruct->moveTarget[guestBattler]));
     for (i = 2; i < gBattlersCount; i++)
+    {
         hash = HashBattleBytes(hash, &gBattleMons[i], sizeof(gBattleMons[i]));
+        hash = HashBattleBytes(hash, &gBattleStruct->battlerPartyOrders[i], sizeof(gBattleStruct->battlerPartyOrders[i]));
+        hash = HashBattleBytes(hash, &gBattleStruct->monToSwitchIntoId[i], sizeof(gBattleStruct->monToSwitchIntoId[i]));
+        hash = HashBattleBytes(hash, &gBattleStruct->chosenMovePositions[i], sizeof(gBattleStruct->chosenMovePositions[i]));
+        hash = HashBattleBytes(hash, &gBattleStruct->moveTarget[i], sizeof(gBattleStruct->moveTarget[i]));
+    }
     if (CoopNet_Role() == 0)
     {
         hash = HashBattleBytes(hash, &gPlayerParty[0], sizeof(struct Pokemon) * MULTI_PARTY_SIZE);
