@@ -99,6 +99,7 @@ static EWRAM_DATA u32 sRemoteBattleChecksum;
 static EWRAM_DATA bool8 sBattleSetupApplied;
 static EWRAM_DATA bool8 sRemoteBattleSetupReady;
 static EWRAM_DATA u16 sRemoteBattleSetupEpoch;
+static EWRAM_DATA u16 sRemoteBattleSetupTurn;
 static EWRAM_DATA u16 sRemoteBattleSetupLen;
 static EWRAM_DATA u8 sRemoteBattleSetup[2048];
 static EWRAM_DATA u16 sPartnerMaxHp;
