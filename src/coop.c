@@ -728,15 +728,18 @@ static void HandleInbound(void)
         {
             ResetGameSession(FALSE);
         }
-        else if (type == COOP_MSG_BATTLE_SETUP && len <= sizeof(sRemoteBattleSetup) && len >= 12)
+        else if (type == COOP_MSG_BATTLE_SETUP && len <= sizeof(sRemoteBattleSetup) && len >= 14)
         {
             u16 epoch = ReadBe16(payload);
-            if ((sInBattle && epoch == sBattleEpoch)
-                || (!sInBattle && epoch == (u16)(sBattleEpoch + 1)))
+            u16 turn = ReadBe16(payload + 2);
+            if ((sInBattle && epoch == sBattleEpoch
+                    && (turn == sBattleTurn || turn == (u16)(sBattleTurn + 1)))
+                || (!sInBattle && epoch == (u16)(sBattleEpoch + 1) && turn == 0))
             {
                 memcpy(sRemoteBattleSetup, payload, len);
                 sRemoteBattleSetupLen = (u16)len;
                 sRemoteBattleSetupEpoch = epoch;
+                sRemoteBattleSetupTurn = turn;
                 sRemoteBattleSetupReady = TRUE;
             }
         }
