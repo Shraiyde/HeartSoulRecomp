@@ -27,6 +27,7 @@
 #define COOP_MAX_FRAME  8192
 #define COOP_QUEUE      48
 #define COOP_RELIABLE_OUTBOX 2048
+#define COOP_OUT_QUEUE COOP_RELIABLE_OUTBOX
 #define COOP_PAY_MAX    4096
 #define COOP_MSG_ACK     0xFFFFu
 #define COOP_MSG_UDP_HELLO 39
@@ -54,7 +55,7 @@ static uint32_t sPosition[COOP_POSITION_WORDS];
 static bool sHavePosition;
 static struct CoopRemoteView sRemote;
 static uint64_t sRemoteAtMs;
-static struct CoopQueued sOut[COOP_QUEUE];
+static struct CoopQueued sOut[COOP_OUT_QUEUE];
 static struct CoopQueued sPending[COOP_RELIABLE_OUTBOX];
 static int sPendingRead, sPendingWrite, sPendingCount;
 static uint32_t sReliableTxSeq, sReliableRxSeq;
@@ -120,23 +121,23 @@ static uint64_t LoadBe64(const uint8_t *p)
     return v;
 }
 
-static bool QueuePush(struct CoopQueued *q, int *read, int *write, int *count, const struct CoopQueued *item)
+static bool QueuePush(struct CoopQueued *q, int *read, int *write, int *count, const struct CoopQueued *item, int capacity)
 {
-    if (*count >= COOP_QUEUE)
+    if (*count >= capacity)
         return false;
     q[*write] = *item;
-    *write = (*write + 1) % COOP_QUEUE;
+    *write = (*write + 1) % capacity;
     (*count)++;
     (void)read;
     return true;
 }
 
-static bool QueuePop(struct CoopQueued *q, int *read, int *write, int *count, struct CoopQueued *item)
+static bool QueuePop(struct CoopQueued *q, int *read, int *write, int *count, struct CoopQueued *item, int capacity)
 {
     if (*count <= 0)
         return false;
     *item = q[*read];
-    *read = (*read + 1) % COOP_QUEUE;
+    *read = (*read + 1) % capacity;
     (*count)--;
     (void)write;
     return true;
@@ -513,7 +514,7 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
             memcpy(item.bytes, payload, payLen);
         }
         pthread_mutex_lock(&sMu);
-        if (QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item))
+        if (QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item, COOP_QUEUE))
         {
             if (!sPcSession)
             {
@@ -524,8 +525,8 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
         else if (sPcSession)
         {
             struct CoopQueued junk;
-            QueuePop(sIn, &sInRead, &sInWrite, &sInCount, &junk);
-            QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item);
+            QueuePop(sIn, &sInRead, &sInWrite, &sInCount, &junk, COOP_QUEUE);
+            QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item, COOP_QUEUE);
         }
         pthread_mutex_unlock(&sMu);
     }
@@ -752,7 +753,7 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq, bool sendPositionTc
             pthread_mutex_unlock(&sMu);
             break;
         }
-        got = QueuePop(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+        got = QueuePop(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
         pthread_mutex_unlock(&sMu);
         if (!got)
             break;
@@ -761,7 +762,7 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq, bool sendPositionTc
             if (!BuildAndSend(fd, sender, item.type, item.bytes, item.len, ++(*seq)))
             {
                 pthread_mutex_lock(&sMu);
-                QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+                QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
                 pthread_mutex_unlock(&sMu);
                 break;
             }
@@ -775,7 +776,7 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq, bool sendPositionTc
             pthread_mutex_lock(&sMu);
             sReliableTxSeq--;
             item.seq = 0;
-            QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+            QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
             pthread_mutex_unlock(&sMu);
             break;
         }
@@ -1081,8 +1082,8 @@ static void QueueSessionReset(void)
     memset(&item, 0, sizeof(item));
     item.type = COOP_MSG_SESSION_RESET;
     pthread_mutex_lock(&sMu);
-    QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item);
-    QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+    QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item, COOP_QUEUE);
+    QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
     pthread_mutex_unlock(&sMu);
 }
 
@@ -1437,7 +1438,7 @@ static void RunSession(int fd, int localRole, bool isHost)
                     pthread_mutex_unlock(&sMu);
                     break;
                 }
-                got = QueuePop(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+                got = QueuePop(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
                 pthread_mutex_unlock(&sMu);
                 if (!got)
                     break;
@@ -1446,7 +1447,7 @@ static void RunSession(int fd, int localRole, bool isHost)
                     if (!BuildAndSend(fd, localRole, item.type, item.bytes, item.len, ++seq))
                     {
                         pthread_mutex_lock(&sMu);
-                        QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+                        QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
                         pthread_mutex_unlock(&sMu);
                         goto down;
                     }
@@ -1460,7 +1461,7 @@ static void RunSession(int fd, int localRole, bool isHost)
                     pthread_mutex_lock(&sMu);
                     sReliableTxSeq--;
                     item.seq = 0;
-                    QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+                    QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
                     pthread_mutex_unlock(&sMu);
                     goto down;
                 }
@@ -1700,7 +1701,7 @@ bool CoopNet_SendWord(uint16_t type, uint32_t word)
     item.len = 4;
     StoreBe32(item.bytes, word);
     pthread_mutex_lock(&sMu);
-    ok = QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+    ok = QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
     pthread_mutex_unlock(&sMu);
     return ok;
 }
@@ -1716,7 +1717,7 @@ bool CoopNet_SendBytes(uint16_t type, const uint8_t *bytes, uint32_t len)
     item.len = (uint16_t)len;
     memcpy(item.bytes, bytes, len);
     pthread_mutex_lock(&sMu);
-    ok = QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+    ok = QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item, COOP_OUT_QUEUE);
     pthread_mutex_unlock(&sMu);
     return ok;
 }
@@ -1728,7 +1729,7 @@ bool CoopNet_Poll(uint16_t *type, uint8_t *payload, uint32_t *len, uint32_t cap)
     if (type == NULL || len == NULL)
         return false;
     pthread_mutex_lock(&sMu);
-    got = QueuePop(sIn, &sInRead, &sInWrite, &sInCount, &item);
+    got = QueuePop(sIn, &sInRead, &sInWrite, &sInCount, &item, COOP_QUEUE);
     pthread_mutex_unlock(&sMu);
     if (!got)
         return false;
