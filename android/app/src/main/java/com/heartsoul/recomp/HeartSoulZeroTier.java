@@ -89,6 +89,8 @@ public final class HeartSoulZeroTier {
     private static volatile String message = "";
     private static volatile long networkId = 0;
     private static volatile boolean ready = false;
+    // Polled off the UI thread: a native connect may hold ZT for several seconds.
+    private static volatile boolean transportReadyCached = false;
     private static boolean started = false;
 
     private static volatile int hostGeneration = 0;
@@ -179,6 +181,28 @@ public final class HeartSoulZeroTier {
             message = "";
             state = "ready";
             ready = true;
+            transportReadyCached = true;
+            Thread monitor = new Thread(() -> {
+                while (ready) {
+                    try {
+                        boolean connected;
+                        synchronized (ZT) {
+                            connected = ZeroTierNative.zts_net_transport_is_ready(networkId) == 1;
+                        }
+                        transportReadyCached = connected;
+                        Thread.sleep(1000);
+                    } catch (InterruptedException stopped) {
+                        return;
+                    } catch (Throwable error) {
+                        transportReadyCached = false;
+                        Log.w(TAG, "ZeroTier transport status check failed", error);
+                        try { Thread.sleep(1000); }
+                        catch (InterruptedException stopped) { return; }
+                    }
+                }
+            }, "heartsoul-zt-status");
+            monitor.setDaemon(true);
+            monitor.start();
         } catch (Throwable error) {
             Log.e(TAG, "ZeroTier start failed", error);
             fail("ZeroTier failed to start.");
@@ -215,6 +239,7 @@ public final class HeartSoulZeroTier {
 
     private static void fail(String reason) {
         ready = false;
+        transportReadyCached = false;
         message = reason;
         state = "error";
         Log.w(TAG, reason);
@@ -228,11 +253,8 @@ public final class HeartSoulZeroTier {
         // only means it no longer hears ZeroTier's central servers; players
         // stay linked to each other and the game carries on. Showing that as
         // "Reconnecting..." was a false alarm that never went away.
-        if (ready && note.isEmpty()) {
-            int transportReady;
-            synchronized (ZT) { transportReady = ZeroTierNative.zts_net_transport_is_ready(networkId); }
-            if (transportReady != 1) note = "Reconnecting...";
-        }
+        if (ready && note.isEmpty() && !transportReadyCached)
+            note = "Reconnecting...";
         return state + "\t" + address + "\t" + note;
     }
 
