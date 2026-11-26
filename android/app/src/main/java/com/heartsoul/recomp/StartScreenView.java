@@ -21,14 +21,13 @@ import java.util.Locale;
  */
 final class StartScreenView extends View {
     interface Listener {
-        void onStartGame(Settings settings);
+        void onStartGame(Settings settings, int coopMode);
     }
 
     // Design size in GBA pixels that the scale is chosen from.
     private static final int DESIGN_WIDTH = 256;
-    // 210 high holds the four option rows with the margins; the Thor still
-    // draws at 5x and a 640x480 screen at 2x.
-    private static final int DESIGN_HEIGHT = 210;
+    // 228 high holds the five option rows with the margins.
+    private static final int DESIGN_HEIGHT = 228;
     // The panels get no wider than this, in GBA pixels.
     private static final int MAX_CONTENT_WIDTH = 320;
 
@@ -41,9 +40,10 @@ final class StartScreenView extends View {
     private static final int ROW_SCALE = 1;
     private static final int ROW_BOTTOM = 2;
     private static final int ROW_FAST_FORWARD = 3;
-    private static final int ROW_START = 4;
-    private static final int ROW_COUNT = 5;
-    private static final int OPTION_ROWS = 4;
+    private static final int ROW_COOP = 4;
+    private static final int ROW_START = 5;
+    private static final int ROW_COUNT = 6;
+    private static final int OPTION_ROWS = 5;
 
     // The bottom screen's palette.
     private static final int COLOR_BACKGROUND = 0xFF2E5070;
@@ -80,8 +80,11 @@ final class StartScreenView extends View {
     private static final String[] PICTURE_NAMES = { "ORIGINAL", "WIDESCREEN", "ZOOMED OUT" };
     private static final String[] SCALE_NAMES = { "FIT", "PIXEL PERFECT", "STRETCH" };
     private static final String[] FAST_FORWARD_NAMES = { "HOLD", "TOGGLE", "SMART" };
+    private static final String[] COOP_NAMES = { "OFF", "HOST", "JOIN" };
 
     private final Settings settings;
+    // Transient for this launch; never silently hosts or joins on the next app start.
+    private int coopMode;
     private final int screenWidth;
     private final int screenHeight;
     private final boolean hasSecondScreen;
@@ -192,12 +195,13 @@ final class StartScreenView extends View {
         int inLeft = left + (PAD_X + 1) * s;
         int inRight = right - (PAD_X + 1) * s;
         int y = top + (PAD_Y + 1) * s;
-        String[] labels = { "PICTURE", "SCALING", "BOTTOM SCREEN", "FAST FORWARD" };
+        String[] labels = { "PICTURE", "SCALING", "BOTTOM SCREEN", "FAST FORWARD", "CO-OP" };
         String[] values = {
             PICTURE_NAMES[settings.picture],
             SCALE_NAMES[settings.scale],
             settings.bottomScreen ? "ON" : "OFF",
             FAST_FORWARD_NAMES[settings.fastForward],
+            COOP_NAMES[coopMode],
         };
         // Labels share a size, and so do the values, so the rows line up.
         int labelRoom = (inRight - inLeft) * 45 / 100;
@@ -450,6 +454,9 @@ final class StartScreenView extends View {
                 settings.fastForward = (settings.fastForward + direction + Settings.FAST_FORWARD_COUNT)
                         % Settings.FAST_FORWARD_COUNT;
                 break;
+            case ROW_COOP:
+                coopMode = (coopMode + direction + COOP_NAMES.length) % COOP_NAMES.length;
+                break;
             default:
                 return;
         }
@@ -462,7 +469,7 @@ final class StartScreenView extends View {
             return;
         }
         started = true;
-        listener.onStartGame(settings);
+        listener.onStartGame(settings, coopMode);
     }
 
     @Override
