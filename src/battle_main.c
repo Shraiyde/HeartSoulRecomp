@@ -4461,6 +4461,8 @@ static void HandleTurnActionSelectionState(void)
         case STATE_WAIT_ACTION_CHOSEN: // Try to perform an action.
             if (!IsBattleControllerActiveOrPendingSyncAnywhere(battler))
             {
+                bool8 remoteCoopAction = (gBattleTypeFlags & BATTLE_TYPE_COOP)
+                    && position == B_POSITION_PLAYER_RIGHT && sCoopRemoteActionReady[battler];
                 RecordedBattle_SetBattlerAction(battler, gBattleResources->bufferB[battler][1]);
                 gChosenActionByBattler[battler] = gBattleResources->bufferB[battler][1];
 
@@ -4662,7 +4664,7 @@ static void HandleTurnActionSelectionState(void)
                     break;
                 }
 
-                if (gBattleTypeFlags & BATTLE_TYPE_TRAINER
+                if (!remoteCoopAction && gBattleTypeFlags & BATTLE_TYPE_TRAINER
                     && gBattleTypeFlags & (BATTLE_TYPE_FRONTIER | BATTLE_TYPE_TRAINER_HILL)
                     && gBattleResources->bufferB[battler][1] == B_ACTION_RUN)
                 {
@@ -4672,7 +4674,7 @@ static void HandleTurnActionSelectionState(void)
                     gBattleStruct->stateIdAfterSelScript[battler] = STATE_BEFORE_ACTION_CHOSEN;
                     return;
                 }
-                else if (CanPlayerForfeitNormalTrainerBattle() && gBattleResources->bufferB[battler][1] == B_ACTION_RUN)
+                else if (!remoteCoopAction && CanPlayerForfeitNormalTrainerBattle() && gBattleResources->bufferB[battler][1] == B_ACTION_RUN)
                 {
                     gSelectionBattleScripts[battler] = BattleScript_QuestionForfeitBattle;
                     gBattleCommunication[battler] = STATE_SELECTION_SCRIPT_MAY_RUN;
@@ -4680,16 +4682,16 @@ static void HandleTurnActionSelectionState(void)
                     gBattleStruct->stateIdAfterSelScript[battler] = STATE_BEFORE_ACTION_CHOSEN;
                     return;
                 }
-                else if (gBattleTypeFlags & BATTLE_TYPE_TRAINER
+                else if (!remoteCoopAction && gBattleTypeFlags & BATTLE_TYPE_TRAINER
                       && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
                       && gBattleResources->bufferB[battler][1] == B_ACTION_RUN)
                 {
                     BattleScriptExecute(BattleScript_PrintCantRunFromTrainer);
                     gBattleCommunication[battler] = STATE_BEFORE_ACTION_CHOSEN;
                 }
-                else if ((IsRunningFromBattleImpossible(battler) != BATTLE_RUN_SUCCESS
+                else if (!remoteCoopAction && ((IsRunningFromBattleImpossible(battler) != BATTLE_RUN_SUCCESS)
                          && gBattleResources->bufferB[battler][1] == B_ACTION_RUN)
-                         || (FlagGet(B_FLAG_NO_RUNNING) == TRUE && gBattleResources->bufferB[battler][1] == B_ACTION_RUN))
+                         || (FlagGet(B_FLAG_NO_RUNNING) == TRUE && gBattleResources->bufferB[battler][1] == B_ACTION_RUN)))
                 {
                     gSelectionBattleScripts[battler] = BattleScript_PrintCantEscapeFromBattle;
                     gBattleCommunication[battler] = STATE_SELECTION_SCRIPT;
@@ -4859,8 +4861,12 @@ static void HandleTurnActionSelectionState(void)
                 action.switchIndex = gBattleStruct->monToSwitchIntoId[battler];
                 action.movePosition = gBattleStruct->chosenMovePositions[battler];
                 action.moveTarget = gBattleStruct->moveTarget[battler];
-                Coop_BattleSendLocalAction(&action);
+                if (!Coop_BattleSendLocalAction(&action))
+                    break;
             }
+            if ((gBattleTypeFlags & BATTLE_TYPE_COOP)
+                && position == B_POSITION_PLAYER_RIGHT)
+                sCoopRemoteActionReady[battler] = FALSE;
             if (!IsBattleControllerActiveOrPendingSyncAnywhere(battler))
             {
                 if (AllAtActionConfirmed())
