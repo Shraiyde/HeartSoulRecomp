@@ -26,6 +26,7 @@
 #define COOP_PHONE_PROTOCOL 3
 #define COOP_MAX_FRAME  8192
 #define COOP_QUEUE      48
+#define COOP_RELIABLE_OUTBOX 2048
 #define COOP_PAY_MAX    96
 #define COOP_MSG_ACK     0xFFFFu
 
@@ -52,7 +53,7 @@ static bool sHavePosition;
 static struct CoopRemoteView sRemote;
 static uint64_t sRemoteAtMs;
 static struct CoopQueued sOut[COOP_QUEUE];
-static struct CoopQueued sPending[COOP_QUEUE];
+static struct CoopQueued sPending[COOP_RELIABLE_OUTBOX];
 static int sPendingRead, sPendingWrite, sPendingCount;
 static uint32_t sReliableTxSeq, sReliableRxSeq;
 static bool sAckDirty;
@@ -278,7 +279,7 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
         pthread_mutex_lock(&sMu);
         while (sPendingCount > 0 && sPending[sPendingRead].seq <= ack)
         {
-            sPendingRead = (sPendingRead + 1) % COOP_QUEUE;
+            sPendingRead = (sPendingRead + 1) % COOP_RELIABLE_OUTBOX;
             sPendingCount--;
         }
         pthread_mutex_unlock(&sMu);
@@ -426,7 +427,7 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq)
         struct CoopQueued item;
         bool got;
         pthread_mutex_lock(&sMu);
-        if (!sPcSession && sPendingCount >= COOP_QUEUE)
+        if (!sPcSession && sPendingCount >= COOP_RELIABLE_OUTBOX)
         {
             pthread_mutex_unlock(&sMu);
             break;
@@ -460,7 +461,7 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq)
         }
         pthread_mutex_lock(&sMu);
         sPending[sPendingWrite] = item;
-        sPendingWrite = (sPendingWrite + 1) % COOP_QUEUE;
+        sPendingWrite = (sPendingWrite + 1) % COOP_RELIABLE_OUTBOX;
         sPendingCount++;
         pthread_mutex_unlock(&sMu);
     }
@@ -816,7 +817,7 @@ static void RunSession(int fd, int localRole, bool isHost)
         pthread_mutex_lock(&sMu);
         for (i = 0; i < sPendingCount; i++)
         {
-            int at = (sPendingRead + i) % COOP_QUEUE;
+            int at = (sPendingRead + i) % COOP_RELIABLE_OUTBOX;
             struct CoopQueued item = sPending[at];
             pthread_mutex_unlock(&sMu);
             if (!BuildAndSend(fd, localRole, item.type, item.bytes, item.len, item.seq))
@@ -862,18 +863,26 @@ static void RunSession(int fd, int localRole, bool isHost)
             pthread_mutex_unlock(&sMu);
             lastReplay = now;
         }
-        if (!sPcSession && sAckDirty && now - lastAck >= 100)
+        if (!sPcSession)
         {
             uint8_t ackBytes[4];
-            uint32_t ack;
+            uint32_t ack = 0;
+            bool sendAck = false;
             pthread_mutex_lock(&sMu);
-            ack = sReliableRxSeq;
-            sAckDirty = false;
+            if (sAckDirty && now - lastAck >= 100)
+            {
+                ack = sReliableRxSeq;
+                sAckDirty = false;
+                sendAck = true;
+            }
             pthread_mutex_unlock(&sMu);
-            StoreBe32(ackBytes, ack);
-            if (!BuildAndSend(fd, localRole, COOP_MSG_ACK, ackBytes, sizeof(ackBytes), 0))
-                goto down;
-            lastAck = now;
+            if (sendAck)
+            {
+                StoreBe32(ackBytes, ack);
+                if (!BuildAndSend(fd, localRole, COOP_MSG_ACK, ackBytes, sizeof(ackBytes), 0))
+                    goto down;
+                lastAck = now;
+            }
         }
         {
             bool force;
