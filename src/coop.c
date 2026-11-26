@@ -1312,7 +1312,7 @@ static bool8 PartnerInRange(void)
 bool8 Coop_PartnersNearby(void)
 {
     return Coop_IsStorySyncReady() && PartnerInRange()
-        && sPartnerLeadValid && sPartnerPartyValid;
+        && sPartnerLeadValid && sPartnerPartyValid && sPeerSaveIdentityValid;
 }
 
 bool8 Coop_BlockFieldEvent(void)
@@ -1338,7 +1338,7 @@ bool8 Coop_BlockTrainerApproach(void)
         return FALSE;
     if (!Coop_IsStorySyncReady())
         return TRUE;
-    return PartnerInRange() && (!sPartnerLeadValid || !sPartnerPartyValid);
+    return PartnerInRange() && (!sPartnerLeadValid || !sPartnerPartyValid || !sPeerSaveIdentityValid);
 }
 
 u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
@@ -1347,7 +1347,7 @@ u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
         return localDistance;
     if (!Coop_IsStorySyncReady())
         return 0;
-    if (PartnerInRange() && (!sPartnerLeadValid || !sPartnerPartyValid))
+    if (PartnerInRange() && (!sPartnerLeadValid || !sPartnerPartyValid || !sPeerSaveIdentityValid))
         return 0;
     if (!Coop_PartnersNearby())
         return localDistance;
@@ -1468,6 +1468,8 @@ void Coop_Frame(void)
     if (!sSessionLive)
         return;
     HandleInbound();
+    if (CoopNet_IsUp())
+        PublishSaveIdentity();
     if (up)
     {
         bool8 background = CoopNet_IsBackgrounded();
