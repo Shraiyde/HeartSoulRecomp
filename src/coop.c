@@ -1828,6 +1828,13 @@ bool8 Coop_BattleSyncTurnStart(void)
         return FALSE;
     if (CoopNet_Role() == 0)
     {
+        if (gBattlersCount != MAX_BATTLERS_COUNT || !(gBattleTypeFlags & BATTLE_TYPE_DOUBLE))
+        {
+            sAbort = TRUE;
+            if (gBattleOutcome == 0)
+                gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+            return FALSE;
+        }
         if (!sBattleSetupApplied)
         {
             u8 setup[1024];
@@ -1925,6 +1932,14 @@ bool8 Coop_BattleSyncTurnStart(void)
         if (!sRemoteBattleSetupReady || sRemoteBattleSetupEpoch != sBattleEpoch)
             return FALSE;
         if (sRemoteBattleSetupLen != expectedLen)
+        {
+            sAbort = TRUE;
+            if (gBattleOutcome == 0)
+                gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+            return FALSE;
+        }
+        if (sRemoteBattleSetup[2] != MAX_BATTLERS_COUNT
+            || !(ReadBe32(sRemoteBattleSetup + 4) & BATTLE_TYPE_DOUBLE))
         {
             sAbort = TRUE;
             if (gBattleOutcome == 0)
