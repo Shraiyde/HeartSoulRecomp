@@ -464,6 +464,10 @@ final class StartScreenView extends View {
         invalidate();
     }
 
+    void resetStart() {
+        started = false;
+    }
+
     private void start() {
         if (started) {
             return;
