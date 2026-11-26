@@ -566,6 +566,151 @@ static bool DecodeEncrypted(const uint8_t *wire, size_t wireLen, int expectedSen
     return true;
 }
 
+static bool SameUdpPeer(const struct sockaddr_in *a, const struct sockaddr_in *b)
+{
+    return a->sin_family == b->sin_family
+        && a->sin_addr.s_addr == b->sin_addr.s_addr
+        && a->sin_port == b->sin_port;
+}
+
+static void HandleUdpDatagram(int fd, int localRole, int remoteRole, bool isHost,
+                              bool *udpReady, bool *haveUdpPeer,
+                              struct sockaddr_in *udpPeer, uint64_t *lastUdpRx,
+                              const struct sockaddr_in *from,
+                              const uint8_t *packet, size_t packetLen)
+{
+    uint8_t plain[COOP_MAX_FRAME];
+    size_t plainLen;
+    uint32_t payLen, seq;
+    uint16_t type;
+    const uint8_t *payload;
+    uint64_t now = CoopNowMs();
+
+    if (!DecodeUdpPacket(packet, packetLen, remoteRole, plain, sizeof(plain), &plainLen)
+        || plainLen < 16
+        || LoadBe32(plain) != COOP_PEER_MAGIC
+        || (((uint16_t)plain[4] << 8) | plain[5]) != COOP_PEER_VER)
+        return;
+    type = (uint16_t)(((uint16_t)plain[6] << 8) | plain[7]);
+    payLen = LoadBe32(plain + 8);
+    seq = LoadBe32(plain + 12);
+    if (payLen != plainLen - 16)
+        return;
+    payload = plain + 16;
+
+    if (type == COOP_MSG_UDP_HELLO && isHost && payLen == 40)
+    {
+        char peerSession[20], peerId[20];
+        memcpy(peerSession, payload, 20);
+        memcpy(peerId, payload + 20, 20);
+        peerSession[19] = '\0';
+        peerId[19] = '\0';
+        if (strcmp(peerSession, sPeerSessionId) != 0
+            || strcmp(peerId, sPeerClientId) != 0)
+            return;
+        *udpPeer = *from;
+        *haveUdpPeer = true;
+        *udpReady = true;
+        *lastUdpRx = now;
+        {
+            uint8_t identity[40];
+            memset(identity, 0, sizeof(identity));
+            memcpy(identity, sSessionId, strnlen(sSessionId, 19));
+            memcpy(identity + 20, sClientId, strnlen(sClientId, 19));
+            SendUdpMessage(fd, from, localRole, COOP_MSG_UDP_READY,
+                           identity, sizeof(identity), 0);
+        }
+        return;
+    }
+    if (type == COOP_MSG_UDP_READY && !isHost && payLen == 40)
+    {
+        char peerSession[20], peerId[20];
+        if (!*haveUdpPeer || !SameUdpPeer(from, udpPeer))
+            return;
+        memcpy(peerSession, payload, 20);
+        memcpy(peerId, payload + 20, 20);
+        peerSession[19] = '\0';
+        peerId[19] = '\0';
+        if (strcmp(peerSession, sPeerSessionId) != 0
+            || strcmp(peerId, sPeerClientId) != 0)
+            return;
+        *udpReady = true;
+        *lastUdpRx = now;
+        return;
+    }
+    if (type == COOP_MSG_POSITION && *udpReady && *haveUdpPeer
+        && SameUdpPeer(from, udpPeer))
+    {
+        HandlePlain(plain, plainLen, seq);
+        *lastUdpRx = now;
+    }
+}
+
+static void PollUdp(int fd, int localRole, int remoteRole, bool isHost,
+                    bool *udpReady, bool *haveUdpPeer,
+                    struct sockaddr_in *udpPeer, uint64_t *lastUdpRx)
+{
+    int guard;
+    if (fd < 0)
+        return;
+    for (guard = 0; guard < 16; guard++)
+    {
+        uint8_t packet[12 + COOP_MAX_FRAME + 16];
+        struct sockaddr_in from;
+        socklen_t fromLen = sizeof(from);
+        ssize_t got = recvfrom(fd, packet, sizeof(packet), 0,
+                               (struct sockaddr *)&from, &fromLen);
+        if (got < 0)
+        {
+            if (errno == EINTR)
+                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
+            break;
+        }
+        if (got == 0)
+            continue;
+        HandleUdpDatagram(fd, localRole, remoteRole, isHost,
+                          udpReady, haveUdpPeer, udpPeer, lastUdpRx,
+                          &from, packet, (size_t)got);
+    }
+}
+
+static void SendUdpHello(int fd, int sender, const struct sockaddr_in *peer)
+{
+    uint8_t identity[40];
+    memset(identity, 0, sizeof(identity));
+    memcpy(identity, sSessionId, strnlen(sSessionId, 19));
+    memcpy(identity + 20, sClientId, strnlen(sClientId, 19));
+    SendUdpMessage(fd, peer, sender, COOP_MSG_UDP_HELLO,
+                   identity, sizeof(identity), 0);
+}
+
+static void SendUdpPosition(int fd, int sender, const struct sockaddr_in *peer)
+{
+    uint32_t position[COOP_POSITION_WORDS];
+    uint8_t raw[COOP_POSITION_WORDS * 4];
+    bool have;
+    uint32_t seq;
+    int i;
+
+    pthread_mutex_lock(&sMu);
+    have = sHavePosition;
+    if (have)
+    {
+        memcpy(position, sPosition, sizeof(position));
+        seq = ++sPositionTxSeq;
+    }
+    else
+        seq = 0;
+    pthread_mutex_unlock(&sMu);
+    if (!have)
+        return;
+    for (i = 0; i < COOP_POSITION_WORDS; i++)
+        StoreBe32(raw + i * 4, position[i]);
+    SendUdpMessage(fd, peer, sender, COOP_MSG_POSITION, raw, sizeof(raw), seq);
+}
+
 static void FlushOutbound(int fd, int sender, uint32_t *seq, bool sendPositionTcp)
 {
     uint32_t position[COOP_POSITION_WORDS];
