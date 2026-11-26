@@ -131,6 +131,27 @@ protocol (version 4):
 
 Remaining gaps:
 
+Game-layer work now added on top of that transport:
+
+- Full three-Pokemon partner party snapshots are sent as fixed-layout
+  `struct Pokemon` records. Both phones run the same HnS build/ABI; the
+  payload is bounded by a compile-time 512-byte assertion.
+- Shared trainer battles now wait for the partner's selected action on the
+  right-side battler. Move, switch, and item selections are carried with the
+  turn number; ally move targets are mirrored between each phone's local-left
+  and remote-right view.
+- The host sends both deterministic RNG stream states at the start of every
+  battle turn. The guest pauses battle selection until it has applied the
+  authoritative turn seed, so AI and battle resolution start from the same
+  random state.
+- Battle action and seed packets are tagged with a battle epoch and turn.
+  One-turn-ahead packets are buffered to tolerate small timing differences
+  between phones.
+- A peer process restart is distinguished from a reconnect. The old
+  in-memory session is discarded, both games receive a session-reset event,
+  and a battle in progress is aborted rather than continuing with mismatched
+  battle state.
+
 - The session state and outbox live in process memory; a full app/process
   restart starts a new transport session and does not restore unacknowledged
   events from disk.
@@ -138,8 +159,8 @@ Remaining gaps:
   ENet's independent unreliable/sequenced channel and can experience
   head-of-line blocking.
 - Message-specific idempotency keys for irreversible game effects (rewards,
-  catches, trade commits and battle outcomes) are still needed above transport
-  delivery.
+  catches and trade commits), plus battle-state checksums/resync after a
+  deterministic divergence, are still needed above transport.
 - Position and gameplay messages share one TCP stream. The position snapshot
   is sent first on each flush, but this does not create ENet's independent
   fast channel; large or stalled reliable traffic can still delay movement.
