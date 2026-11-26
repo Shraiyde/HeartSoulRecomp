@@ -1438,6 +1438,11 @@ void Coop_RestoreSharedBattleParty(bool8 fullRestore)
     }
     CalculatePlayerPartyCount();
     sPartySaved = FALSE;
+    sInBattle = FALSE;
+    sBattleHadLink = FALSE;
+    sBattleFinalSent = FALSE;
+    sRemoteBattleFinalReady = FALSE;
+    sBattleFinalWaitFrames = 0;
 }
 
 bool8 Coop_PartnerVisible(void)
@@ -1643,6 +1648,9 @@ void Coop_OnBattleStarted(void)
     sInBattle = TRUE;
     sAbort = FALSE;
     sAbortSent = FALSE;
+    sBattleFinalSent = FALSE;
+    sRemoteBattleFinalReady = FALSE;
+    sBattleFinalWaitFrames = 0;
     /* PrepareSharedTrainerBattle already snapped the real party, then
      * injected the partner lead. A second call from battle init must not
      * photograph that temporary lead. */
@@ -2648,6 +2656,9 @@ void Coop_LeaveAbortedBattle(void)
     sAbort = FALSE;
     sInBattle = FALSE;
     sBattleHadLink = FALSE;
+    sBattleFinalSent = FALSE;
+    sRemoteBattleFinalReady = FALSE;
+    sBattleFinalWaitFrames = 0;
     if (sNewPeerSession)
     {
         sBattleEpoch = 0;
