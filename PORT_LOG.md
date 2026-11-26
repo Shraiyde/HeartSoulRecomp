@@ -1,5 +1,47 @@
 # Port log
 
+## 2026-11-26, ZeroTier UDP position relay
+
+State: the Android bridge and native transport now have a UDP relay path in
+source. The Android build and two-device path are still unverified.
+
+### Changed
+
+- Added a host-side `ZeroTierDatagramSocket` relay. It forwards ZeroTier UDP
+  datagrams to the native host's loopback UDP socket and returns game replies
+  to the sending ZeroTier peer.
+- Added a guest-side relay with a loopback UDP port allocated before SDL
+  starts. `HeartSoulActivity` passes that port as
+  `HNS_COOP_UDP_PORT`; the native guest sends its position datagrams to the
+  relay instead of the unrelated TCP loopback endpoint.
+- Native UDP socket creation now uses the Java-provided relay port for guests.
+  The existing TCP stream remains the reliable gameplay transport and
+  automatic fallback when UDP cannot be established.
+- Documented the bridge as carrying both TCP and UDP.
+- Kept the producer-facing outbound staging queue at 48 entries while the
+  reliable replay outbox remains 2,048 entries, avoiding a redundant 8 MiB
+  staging allocation.
+
+### Not verified
+
+- The Java UDP relay has not yet been compiled against the exact libzt AAR.
+- No Android NDK/Gradle build or two-phone UDP handshake has been run.
+- The UDP relay is single-peer by design; it must be tested with reconnects
+  and stale peer datagrams before release.
+- No APK has been published.
+
+### Next
+
+1. Confirm the branch-push Android build; fix any Java/NDK compile errors.
+2. Verify UDP HELLO/READY and position packets cross the embedded ZeroTier
+   bridge in both directions.
+3. Verify TCP fallback still works when UDP setup fails.
+4. Add protocol tests for ACK/replay/resume and battle-action ownership.
+5. Test disconnect/reconnect and a trainer battle on two Android devices.
+
+---
+
+
 ## 2026-11-26, bound the co-op staging queue
 
 State: transport work is present on `coop/pkmultiplayer-hns-adapter`,
