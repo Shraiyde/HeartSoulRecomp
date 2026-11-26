@@ -151,6 +151,24 @@ semantics or adding more gameplay messages.
    Release after the two-phone test passes; a green compile alone is not a
    multiplayer test.
 
+## First native compatibility change
+
+The Android phone-to-phone handshake now advertises protocol version 2.
+Both peers prove their persistent client identity with the existing HMAC
+challenge. The host pins the first authenticated guest identity for the life
+of that host process; a different client cannot take over the same live host
+session after a disconnect. The guest similarly pins the authenticated host
+identity for its process lifetime. This follows PkMultiplayer's rule that a
+reconnect must be the same peer/save identity, rather than silently attaching
+a different save to an existing shared world. The Windows PC-host handshake
+is intentionally unchanged.
+
+This is only protocol negotiation and peer pinning. It does not yet add the
+sequence/ACK/outbox/resume layer, and it has not been compiled or tested on
+two Android devices. Phone builds using the older direct-phone handshake are
+not wire-compatible with protocol version 2; both phones must use a build
+containing this change.
+
 ## Reference source
 
 - PkMultiplayer fork: https://github.com/Shraiyde/PkMultiplayer
