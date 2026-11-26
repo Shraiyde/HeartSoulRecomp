@@ -144,6 +144,10 @@ Game-layer work now added on top of that transport:
   battle turn. The guest pauses battle selection until it has applied the
   authoritative turn seed, so AI and battle resolution start from the same
   random state.
+- The host sends the generated enemy party, active opponent battlers,
+  battle flags/weather, and mirrored battler party-order/action bookkeeping
+  before the first turn. The guest applies this authoritative setup before
+  comparing the first turn checksum.
 - Battle action and seed packets are tagged with a battle epoch and turn.
   One-turn-ahead packets are buffered to tolerate small timing differences
   between phones.
