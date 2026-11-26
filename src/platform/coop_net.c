@@ -872,28 +872,50 @@ static void *ThreadMain(void *unused)
     }
     else
     {
-        int attempt;
+        unsigned int attempt = 0;
+        uint64_t reconnectStarted = 0;
         if (address == NULL || address[0] == '\0')
         {
             fprintf(stderr, "co-op: join address is missing\n");
             return NULL;
         }
-        for (attempt = 0; attempt < 2 && sWant; attempt++)
+        while (sWant)
         {
-            int fd = TcpConnect(address, port);
-            if (fd < 0)
+            int fd;
+            unsigned int delayMs;
+            if (sEverUp)
             {
-                if (attempt == 0)
-                    usleep(1500 * 1000);
-                continue;
+                if (reconnectStarted == 0)
+                    reconnectStarted = CoopNowMs();
+                if (CoopNowMs() - reconnectStarted >= 60000)
+                {
+                    fprintf(stderr, "co-op: reconnect window expired after 60 seconds\n");
+                    break;
+                }
             }
-            RunSession(fd, 1, false);
-            if (!sWant || !sEverUp)
-                break;
-            if (sResumeSpent)
-                break;
-            sResumeSpent = true;
-            usleep(400 * 1000);
+            fd = TcpConnect(address, port);
+            if (fd >= 0)
+            {
+                RunSession(fd, 1, false);
+                if (!sWant || !sEverUp)
+                    break;
+            }
+            else if (!sEverUp)
+            {
+                /* Initial dialing is bounded too; do not spin forever on a
+                 * mistyped address or a host that is not running. */
+                if (++attempt >= 12)
+                {
+                    fprintf(stderr, "co-op: host could not be reached after 12 attempts\n");
+                    break;
+                }
+            }
+            delayMs = 400u << (attempt > 4 ? 4 : attempt);
+            if (delayMs > 8000u)
+                delayMs = 8000u;
+            usleep(delayMs * 1000u);
+            if (attempt < 16)
+                attempt++;
         }
     }
     NoteLink(false);
