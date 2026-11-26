@@ -1860,6 +1860,110 @@ static bool8 SnapshotApplyPlayerParty(const u8 *buffer, u32 length, u32 *offset)
     return TRUE;
 }
 
+static bool8 SnapshotAppendPartyIndexBattlers(u8 *buffer, u32 *offset, const u8 *array)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        u8 value = array[local];
+        if (i < 2 && value < PARTY_SIZE)
+            value = CanonicalPartyLocalIndex(value);
+        if (!SnapshotAppend(buffer, offset, &value, sizeof(value)))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotApplyPartyIndexBattlers(const u8 *buffer, u32 length, u32 *offset, u8 *array)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        u8 value;
+        if (!SnapshotApply(buffer, length, offset, &value, sizeof(value)))
+            return FALSE;
+        if (i < 2 && value < PARTY_SIZE)
+            value = CanonicalPartyLocalIndex(value);
+        array[local] = value;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotAppendPartyOrders(u8 *buffer, u32 *offset)
+{
+    u8 i, j;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        for (j = 0; j < PARTY_SIZE / 2; j++)
+        {
+            u8 value = gBattleStruct->battlerPartyOrders[local][j];
+            if (i < 2 && value < PARTY_SIZE)
+                value = CanonicalPartyLocalIndex(value);
+            if (!SnapshotAppend(buffer, offset, &value, sizeof(value)))
+                return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotApplyPartyOrders(const u8 *buffer, u32 length, u32 *offset)
+{
+    u8 i, j;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        for (j = 0; j < PARTY_SIZE / 2; j++)
+        {
+            u8 value;
+            if (!SnapshotApply(buffer, length, offset, &value, sizeof(value)))
+                return FALSE;
+            if (i < 2 && value < PARTY_SIZE)
+                value = CanonicalPartyLocalIndex(value);
+            gBattleStruct->battlerPartyOrders[local][j] = value;
+        }
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotAppendSideTimers(u8 *buffer, u32 *offset)
+{
+    struct SideTimer timers[NUM_BATTLE_SIDES];
+    u8 i;
+    memcpy(timers, gSideTimers, sizeof(timers));
+    if (CoopNet_Role() == 1)
+    {
+        for (i = 0; i < NUM_BATTLE_SIDES; i++)
+        {
+            if (timers[i].stickyWebBattlerId < MAX_BATTLERS_COUNT)
+                timers[i].stickyWebBattlerId = CanonicalBattlerLocalIndex(timers[i].stickyWebBattlerId);
+            if (timers[i].followmeTarget < MAX_BATTLERS_COUNT)
+                timers[i].followmeTarget = CanonicalBattlerLocalIndex(timers[i].followmeTarget);
+        }
+    }
+    return SnapshotAppend(buffer, offset, timers, sizeof(timers));
+}
+
+static bool8 SnapshotApplySideTimers(const u8 *buffer, u32 length, u32 *offset)
+{
+    u8 i;
+    if (!SnapshotApply(buffer, length, offset, gSideTimers, sizeof(gSideTimers)))
+        return FALSE;
+    if (CoopNet_Role() == 1)
+    {
+        for (i = 0; i < NUM_BATTLE_SIDES; i++)
+        {
+            if (gSideTimers[i].stickyWebBattlerId < MAX_BATTLERS_COUNT)
+                gSideTimers[i].stickyWebBattlerId = CanonicalBattlerLocalIndex(gSideTimers[i].stickyWebBattlerId);
+            if (gSideTimers[i].followmeTarget < MAX_BATTLERS_COUNT)
+                gSideTimers[i].followmeTarget = CanonicalBattlerLocalIndex(gSideTimers[i].followmeTarget);
+        }
+    }
+    return TRUE;
+}
+
 static bool8 SnapshotAppendPartyState(u8 *buffer, u32 *offset)
 {
     u8 i;
@@ -1942,21 +2046,21 @@ static bool8 BuildBattleSnapshot(u8 *buffer, u32 *length)
         || !SnapshotAppend(buffer, &offset, gEnemyParty, sizeof(gEnemyParty))
         || !SnapshotAppendBattlers(buffer, &offset, gBattleMons, sizeof(gBattleMons[0]))
         || !SnapshotAppend(buffer, &offset, gSideStatuses, sizeof(gSideStatuses))
-        || !SnapshotAppend(buffer, &offset, gSideTimers, sizeof(gSideTimers))
+        || !SnapshotAppendSideTimers(buffer, &offset)
         || !SnapshotAppendBattlers(buffer, &offset, gChosenActionByBattler, sizeof(gChosenActionByBattler[0]))
         || !SnapshotAppendBattlers(buffer, &offset, gChosenMoveByBattler, sizeof(gChosenMoveByBattler[0]))
         || !SnapshotAppendPartyState(buffer, &offset)
-        || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->battlerPartyIndexes, sizeof(gBattleStruct->battlerPartyIndexes[0]))
-        || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->monToSwitchIntoId, sizeof(gBattleStruct->monToSwitchIntoId[0]))
-        || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->battlerPartyOrders, sizeof(gBattleStruct->battlerPartyOrders[0]))
+        || !SnapshotAppendPartyIndexBattlers(buffer, &offset, gBattleStruct->battlerPartyIndexes)
+        || !SnapshotAppendPartyIndexBattlers(buffer, &offset, gBattleStruct->monToSwitchIntoId)
+        || !SnapshotAppendPartyOrders(buffer, &offset)
         || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->chosenMovePositions, sizeof(gBattleStruct->chosenMovePositions[0]))
         || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->stateIdAfterSelScript, sizeof(gBattleStruct->stateIdAfterSelScript[0]))
         || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->lastTakenMove, sizeof(gBattleStruct->lastTakenMove[0]))
         || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->chosenItem, sizeof(gBattleStruct->chosenItem[0]))
         || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->choicedMove, sizeof(gBattleStruct->choicedMove[0]))
-        || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->AI_monToSwitchIntoId, sizeof(gBattleStruct->AI_monToSwitchIntoId[0]))
+        || !SnapshotAppendPartyIndexBattlers(buffer, &offset, gBattleStruct->AI_monToSwitchIntoId)
         || !SnapshotAppendBattlerMatrix(buffer, &offset, gBattleStruct->lastTakenMoveFrom, sizeof(gBattleStruct->lastTakenMoveFrom[0][0]))
-        || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->itemPartyIndex, sizeof(gBattleStruct->itemPartyIndex[0]))
+        || !SnapshotAppendPartyIndexBattlers(buffer, &offset, gBattleStruct->itemPartyIndex)
         || !SnapshotAppendBattlers(buffer, &offset, gBattleStruct->itemMoveIndex, sizeof(gBattleStruct->itemMoveIndex[0]))
         || !SnapshotAppend(buffer, &offset, gBattleStruct->arenaMindPoints, sizeof(gBattleStruct->arenaMindPoints))
         || !SnapshotAppend(buffer, &offset, gBattleStruct->arenaSkillPoints, sizeof(gBattleStruct->arenaSkillPoints))
@@ -1994,21 +2098,21 @@ static bool8 ApplyBattleSnapshot(const u8 *buffer, u32 length)
         || !SnapshotApply(buffer, length, &offset, gEnemyParty, sizeof(gEnemyParty))
         || !SnapshotApplyBattlers(buffer, length, &offset, gBattleMons, sizeof(gBattleMons[0]))
         || !SnapshotApply(buffer, length, &offset, gSideStatuses, sizeof(gSideStatuses))
-        || !SnapshotApply(buffer, length, &offset, gSideTimers, sizeof(gSideTimers))
+        || !SnapshotApplySideTimers(buffer, length, &offset)
         || !SnapshotApplyBattlers(buffer, length, &offset, gChosenActionByBattler, sizeof(gChosenActionByBattler[0]))
         || !SnapshotApplyBattlers(buffer, length, &offset, gChosenMoveByBattler, sizeof(gChosenMoveByBattler[0]))
         || !SnapshotApplyPartyState(buffer, length, &offset)
-        || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->battlerPartyIndexes, sizeof(gBattleStruct->battlerPartyIndexes[0]))
-        || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->monToSwitchIntoId, sizeof(gBattleStruct->monToSwitchIntoId[0]))
-        || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->battlerPartyOrders, sizeof(gBattleStruct->battlerPartyOrders[0]))
+        || !SnapshotApplyPartyIndexBattlers(buffer, length, &offset, gBattleStruct->battlerPartyIndexes)
+        || !SnapshotApplyPartyIndexBattlers(buffer, length, &offset, gBattleStruct->monToSwitchIntoId)
+        || !SnapshotApplyPartyOrders(buffer, length, &offset)
         || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->chosenMovePositions, sizeof(gBattleStruct->chosenMovePositions[0]))
         || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->stateIdAfterSelScript, sizeof(gBattleStruct->stateIdAfterSelScript[0]))
         || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->lastTakenMove, sizeof(gBattleStruct->lastTakenMove[0]))
         || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->chosenItem, sizeof(gBattleStruct->chosenItem[0]))
         || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->choicedMove, sizeof(gBattleStruct->choicedMove[0]))
-        || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->AI_monToSwitchIntoId, sizeof(gBattleStruct->AI_monToSwitchIntoId[0]))
+        || !SnapshotApplyPartyIndexBattlers(buffer, length, &offset, gBattleStruct->AI_monToSwitchIntoId)
         || !SnapshotApplyBattlerMatrix(buffer, length, &offset, gBattleStruct->lastTakenMoveFrom, sizeof(gBattleStruct->lastTakenMoveFrom[0][0]))
-        || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->itemPartyIndex, sizeof(gBattleStruct->itemPartyIndex[0]))
+        || !SnapshotApplyPartyIndexBattlers(buffer, length, &offset, gBattleStruct->itemPartyIndex)
         || !SnapshotApplyBattlers(buffer, length, &offset, gBattleStruct->itemMoveIndex, sizeof(gBattleStruct->itemMoveIndex[0]))
         || !SnapshotApply(buffer, length, &offset, gBattleStruct->arenaMindPoints, sizeof(gBattleStruct->arenaMindPoints))
         || !SnapshotApply(buffer, length, &offset, gBattleStruct->arenaSkillPoints, sizeof(gBattleStruct->arenaSkillPoints))
