@@ -1,4 +1,5 @@
 #include "global.h"
+#include "coop_sync.h"
 #include "event_data.h"
 #include "pokedex.h"
 
@@ -248,8 +249,11 @@ u8 *GetFlagPointer(u16 id)
 u8 FlagSet(u16 id)
 {
     u8 *ptr = GetFlagPointer(id);
+    bool8 wasSet = FlagGet(id);
     if (ptr)
         *ptr |= 1 << (id & 7);
+    if (!wasSet && FlagGet(id))
+        CoopSync_FlagChanged(id, TRUE);
     return 0;
 }
 
@@ -257,15 +261,21 @@ u8 FlagToggle(u16 id)
 {
     u8 *ptr = GetFlagPointer(id);
     if (ptr)
+    {
         *ptr ^= 1 << (id & 7);
+        CoopSync_FlagChanged(id, FlagGet(id));
+    }
     return 0;
 }
 
 u8 FlagClear(u16 id)
 {
     u8 *ptr = GetFlagPointer(id);
+    bool8 wasSet = FlagGet(id);
     if (ptr)
         *ptr &= ~(1 << (id & 7));
+    if (wasSet)
+        CoopSync_FlagChanged(id, FALSE);
     return 0;
 }
 
