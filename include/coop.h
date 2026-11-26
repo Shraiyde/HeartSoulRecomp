@@ -21,6 +21,7 @@ struct CoopBattleAction
 
 bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out);
 bool8 Coop_BattleSyncTurnStart(void);
+bool8 Coop_BattleSyncFinalState(void);
 bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action);
 void Coop_BattleTurnComplete(void);
 
