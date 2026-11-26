@@ -1,5 +1,29 @@
 # Port log
 
+## 2026-11-26, serialize guest UDP socket cleanup
+
+### Changed
+
+- Fixed the guest ZeroTier UDP relay's final cleanup path: its
+  `ZeroTierDatagramSocket.close()` now runs under the shared `ZT` lock,
+  matching the host relay and the other libzt socket operations.
+- This closes a gap in the earlier socket-serialization pass. libzt exposes
+  shared native error state, so even cleanup on a different relay thread must
+  not overlap another thread's libzt call.
+
+### Not verified
+
+- The Android NDK/Gradle build has not yet been run after this change.
+- No two-phone UDP handshake, disconnect, or reconnect test has been run.
+
+### Next
+
+1. Check the Android co-op build for Java/NDK errors.
+2. Exercise guest UDP shutdown while the TCP bridge is active.
+3. Verify UDP HELLO/READY, movement packets, and TCP fallback on two devices.
+
+---
+
 ## 2026-11-26, serialize ZeroTier socket operations
 
 ### Changed
