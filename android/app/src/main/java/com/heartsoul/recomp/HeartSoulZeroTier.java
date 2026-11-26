@@ -350,17 +350,25 @@ public final class HeartSoulZeroTier {
             local.setSoTimeout(100);
             byte[] buffer = new byte[2048];
             while (live.current()) {
-                if (peerPinned && System.currentTimeMillis() - lastPeerPacketMs > 4500) {
+                long now = System.currentTimeMillis();
+                if (peerPinned && now - lastPeerPacketMs > 4500) {
                     peer = null;
                     candidatePeer = null;
                     peerPinned = false;
+                } else if (!peerPinned && candidatePeer != null && now - lastPeerPacketMs > 4500) {
+                    // Expire an unauthenticated candidate so a failed hello
+                    // cannot reserve the relay endpoint indefinitely.
+                    candidatePeer = null;
                 }
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     synchronized (ZT) { zt.receive(packet); }
                     SocketAddress source = packet.getSocketAddress();
-                    if (!peerPinned || peer.equals(source)) {
-                        candidatePeer = source;
+                    if (peerPinned ? peer.equals(source)
+                            : (candidatePeer == null || candidatePeer.equals(source))) {
+                        // Hold one candidate endpoint during the authenticated
+                        // UDP hello. Other senders cannot redirect the reply.
+                        if (!peerPinned) candidatePeer = source;
                         lastPeerPacketMs = System.currentTimeMillis();
                         byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
                                 packet.getOffset() + packet.getLength());
