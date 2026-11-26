@@ -71,6 +71,9 @@ source. The Android build and two-device path are still unverified.
   replies to an authenticated UDP hello, rejects other endpoints while pinned,
   and releases the pin after 4.5 seconds without peer datagrams so a new guest
   can join after the previous session ends.
+- The guest relay also pins the local native UDP sender and releases that pin
+  after the same idle window, preventing another local socket from taking over
+  an active game's relay endpoint.
 - UDP is optional: if the guest cannot bind its loopback relay, the TCP
   connection still opens and the native transport falls back to TCP positions.
 - Native UDP socket creation now uses the Java-provided relay port for guests.
