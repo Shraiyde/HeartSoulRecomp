@@ -2048,42 +2048,16 @@ bool8 Coop_BattleSyncTurnStart(void)
         }
         if (!sBattleSetupApplied)
         {
-            u8 setup[2048];
-            u32 offset = 12;
-            u32 setupLen = 12 + sizeof(gEnemyParty) + 2 * sizeof(gBattleMons[0]) + sizeof(gBattleStruct->battlerPartyIndexes) + sizeof(gBattleStruct->monToSwitchIntoId) + sizeof(gBattleStruct->battlerPartyOrders) + sizeof(gBattleStruct->chosenMovePositions) + sizeof(gBattleStruct->moveTarget) + sizeof(gBattleStruct->itemPartyIndex);
-            if (setupLen > sizeof(setup))
+            u8 snapshot[2048];
+            u32 snapshotLen;
+            if (!BuildBattleSnapshot(snapshot, &snapshotLen)
+                || !CoopNet_SendBytes(COOP_MSG_BATTLE_SETUP, snapshot, snapshotLen))
+            {
+                sAbort = TRUE;
+                if (gBattleOutcome == 0)
+                    gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
                 return FALSE;
-            setup[0] = (u8)(sBattleEpoch >> 8);
-            setup[1] = (u8)sBattleEpoch;
-            setup[2] = gBattlersCount;
-            setup[3] = 0;
-            setup[4] = (u8)(gBattleTypeFlags >> 24);
-            setup[5] = (u8)(gBattleTypeFlags >> 16);
-            setup[6] = (u8)(gBattleTypeFlags >> 8);
-            setup[7] = (u8)gBattleTypeFlags;
-            setup[8] = (u8)(gBattleWeather >> 24);
-            setup[9] = (u8)(gBattleWeather >> 16);
-            setup[10] = (u8)(gBattleWeather >> 8);
-            setup[11] = (u8)gBattleWeather;
-            memcpy(setup + offset, gEnemyParty, sizeof(gEnemyParty));
-            offset += sizeof(gEnemyParty);
-            memcpy(setup + offset, &gBattleMons[2], sizeof(gBattleMons[0]));
-            offset += sizeof(gBattleMons[0]);
-            memcpy(setup + offset, &gBattleMons[3], sizeof(gBattleMons[0]));
-            offset += sizeof(gBattleMons[0]);
-            memcpy(setup + offset, gBattleStruct->battlerPartyIndexes, sizeof(gBattleStruct->battlerPartyIndexes));
-            offset += sizeof(gBattleStruct->battlerPartyIndexes);
-            memcpy(setup + offset, gBattleStruct->monToSwitchIntoId, sizeof(gBattleStruct->monToSwitchIntoId));
-            offset += sizeof(gBattleStruct->monToSwitchIntoId);
-            memcpy(setup + offset, gBattleStruct->battlerPartyOrders, sizeof(gBattleStruct->battlerPartyOrders));
-            offset += sizeof(gBattleStruct->battlerPartyOrders);
-            memcpy(setup + offset, gBattleStruct->chosenMovePositions, sizeof(gBattleStruct->chosenMovePositions));
-            offset += sizeof(gBattleStruct->chosenMovePositions);
-            memcpy(setup + offset, gBattleStruct->moveTarget, sizeof(gBattleStruct->moveTarget));
-            offset += sizeof(gBattleStruct->moveTarget);
-            memcpy(setup + offset, gBattleStruct->itemPartyIndex, sizeof(gBattleStruct->itemPartyIndex));
-            if (!CoopNet_SendBytes(COOP_MSG_BATTLE_SETUP, setup, setupLen))
-                return FALSE;
+            }
             sBattleSetupApplied = TRUE;
         }
         if (sBattleSeedSent)
@@ -2136,74 +2110,19 @@ bool8 Coop_BattleSyncTurnStart(void)
         sBattleSeedSent = TRUE;
         return TRUE;
     }
+
     if (!sBattleSetupApplied)
     {
-        u32 offset = 12;
-        u32 expectedLen = 12 + sizeof(gEnemyParty) + 2 * sizeof(gBattleMons[0]) + sizeof(gBattleStruct->battlerPartyIndexes) + sizeof(gBattleStruct->monToSwitchIntoId) + sizeof(gBattleStruct->battlerPartyOrders) + sizeof(gBattleStruct->chosenMovePositions) + sizeof(gBattleStruct->moveTarget) + sizeof(gBattleStruct->itemPartyIndex);
-        if (!sRemoteBattleSetupReady || sRemoteBattleSetupEpoch != sBattleEpoch)
+        if (!sRemoteBattleSetupReady
+            || sRemoteBattleSetupEpoch != sBattleEpoch
+            || sRemoteBattleSetupTurn != sBattleTurn)
             return FALSE;
-        if (sRemoteBattleSetupLen != expectedLen)
+        if (!ApplyBattleSnapshot(sRemoteBattleSetup, sRemoteBattleSetupLen))
         {
             sAbort = TRUE;
             if (gBattleOutcome == 0)
                 gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
             return FALSE;
-        }
-        if (sRemoteBattleSetup[2] != MAX_BATTLERS_COUNT
-            || !(ReadBe32(sRemoteBattleSetup + 4) & BATTLE_TYPE_DOUBLE))
-        {
-            sAbort = TRUE;
-            if (gBattleOutcome == 0)
-                gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
-            return FALSE;
-        }
-        gBattlersCount = sRemoteBattleSetup[2];
-        gBattleTypeFlags = ReadBe32(sRemoteBattleSetup + 4);
-        gBattleWeather = ReadBe32(sRemoteBattleSetup + 8);
-        memcpy(gEnemyParty, sRemoteBattleSetup + offset, sizeof(gEnemyParty));
-        offset += sizeof(gEnemyParty);
-        memcpy(&gBattleMons[2], sRemoteBattleSetup + offset, sizeof(gBattleMons[0]));
-        offset += sizeof(gBattleMons[0]);
-        memcpy(&gBattleMons[3], sRemoteBattleSetup + offset, sizeof(gBattleMons[0]));
-        offset += sizeof(gBattleMons[0]);
-        {
-            u32 i;
-            for (i = 0; i < MAX_BATTLERS_COUNT; i++)
-            {
-                u32 local = i == 0 ? 1 : (i == 1 ? 0 : i);
-                memcpy(&gBattleStruct->battlerPartyIndexes[local], sRemoteBattleSetup + offset, sizeof(gBattleStruct->battlerPartyIndexes[0]));
-                offset += sizeof(gBattleStruct->battlerPartyIndexes[0]);
-            }
-            for (i = 0; i < MAX_BATTLERS_COUNT; i++)
-            {
-                u32 local = i == 0 ? 1 : (i == 1 ? 0 : i);
-                memcpy(&gBattleStruct->monToSwitchIntoId[local], sRemoteBattleSetup + offset, sizeof(gBattleStruct->monToSwitchIntoId[0]));
-                offset += sizeof(gBattleStruct->monToSwitchIntoId[0]);
-            }
-            for (i = 0; i < MAX_BATTLERS_COUNT; i++)
-            {
-                u32 local = i == 0 ? 1 : (i == 1 ? 0 : i);
-                memcpy(&gBattleStruct->battlerPartyOrders[local], sRemoteBattleSetup + offset, sizeof(gBattleStruct->battlerPartyOrders[0]));
-                offset += sizeof(gBattleStruct->battlerPartyOrders[0]);
-            }
-            for (i = 0; i < MAX_BATTLERS_COUNT; i++)
-            {
-                u32 local = i == 0 ? 1 : (i == 1 ? 0 : i);
-                memcpy(&gBattleStruct->chosenMovePositions[local], sRemoteBattleSetup + offset, sizeof(gBattleStruct->chosenMovePositions[0]));
-                offset += sizeof(gBattleStruct->chosenMovePositions[0]);
-            }
-            for (i = 0; i < MAX_BATTLERS_COUNT; i++)
-            {
-                u32 local = i == 0 ? 1 : (i == 1 ? 0 : i);
-                memcpy(&gBattleStruct->moveTarget[local], sRemoteBattleSetup + offset, sizeof(gBattleStruct->moveTarget[0]));
-                offset += sizeof(gBattleStruct->moveTarget[0]);
-            }
-            for (i = 0; i < MAX_BATTLERS_COUNT; i++)
-            {
-                u32 local = i == 0 ? 1 : (i == 1 ? 0 : i);
-                memcpy(&gBattleStruct->itemPartyIndex[local], sRemoteBattleSetup + offset, sizeof(gBattleStruct->itemPartyIndex[0]));
-                offset += sizeof(gBattleStruct->itemPartyIndex[0]);
-            }
         }
         sBattleSetupApplied = TRUE;
         sRemoteBattleSetupReady = FALSE;
@@ -2238,8 +2157,11 @@ void Coop_BattleTurnComplete(void)
     if (sRemoteBattleActionEpoch != sBattleEpoch || sRemoteBattleActionTurn != sBattleTurn)
         sRemoteBattleActionReady = FALSE;
     sBattleSeedSent = FALSE;
+    sBattleSetupApplied = FALSE;
     if (sRemoteBattleSeedEpoch != sBattleEpoch || sRemoteBattleSeedTurn != sBattleTurn)
         sRemoteBattleSeedReady = FALSE;
+    if (sRemoteBattleSetupEpoch != sBattleEpoch || sRemoteBattleSetupTurn != sBattleTurn)
+        sRemoteBattleSetupReady = FALSE;
 }
 
 bool8 Coop_BattleAbortPending(void)
