@@ -613,7 +613,7 @@ static u16 ReadBe16(const u8 *p)
 static void HandleInbound(void)
 {
     u16 type;
-    u8 payload[512];
+    u8 payload[1024];
     u32 len;
     u8 guard;
 
@@ -1674,6 +1674,8 @@ bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
     sLocalBattleActionSent = TRUE;
     return TRUE;
 }
+
+STATIC_ASSERT(12 + sizeof(gEnemyParty) + 2 * sizeof(gBattleMons[0]) <= 1024, CoopBattleSetupTooLarge);
 
 static u32 HashBattleBytes(u32 hash, const void *data, u32 size)
 {
