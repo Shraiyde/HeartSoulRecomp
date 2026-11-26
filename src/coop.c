@@ -100,7 +100,7 @@ static EWRAM_DATA bool8 sBattleSetupApplied;
 static EWRAM_DATA bool8 sRemoteBattleSetupReady;
 static EWRAM_DATA u16 sRemoteBattleSetupEpoch;
 static EWRAM_DATA u16 sRemoteBattleSetupLen;
-static EWRAM_DATA u8 sRemoteBattleSetup[1024];
+static EWRAM_DATA u8 sRemoteBattleSetup[2048];
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
@@ -658,7 +658,7 @@ static void ResetGameSession(bool8 notifyPeer)
 static void HandleInbound(void)
 {
     u16 type;
-    u8 payload[1024];
+    u8 payload[2048];
     u32 len;
     u8 guard;
 
@@ -1837,7 +1837,7 @@ bool8 Coop_BattleSyncTurnStart(void)
         }
         if (!sBattleSetupApplied)
         {
-            u8 setup[1024];
+            u8 setup[2048];
             u32 offset = 12;
             u32 setupLen = 12 + sizeof(gEnemyParty) + 2 * sizeof(gBattleMons[0]) + sizeof(gBattleStruct->battlerPartyIndexes) + sizeof(gBattleStruct->monToSwitchIntoId) + sizeof(gBattleStruct->battlerPartyOrders) + sizeof(gBattleStruct->chosenMovePositions) + sizeof(gBattleStruct->moveTarget) + sizeof(gBattleStruct->itemPartyIndex);
             if (setupLen > sizeof(setup))
