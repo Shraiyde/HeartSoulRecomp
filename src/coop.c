@@ -2022,6 +2022,252 @@ static bool8 SnapshotApplyBattlerMatrix(const u8 *buffer, u32 length, u32 *offse
     return TRUE;
 }
 
+static bool8 SnapshotAppendProtectStructs(u8 *buffer, u32 *offset)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct ProtectStruct state = gProtectStructs[local];
+        if (CoopNet_Role() == 1)
+        {
+            if (state.physicalBattlerId < MAX_BATTLERS_COUNT)
+                state.physicalBattlerId = CanonicalBattlerLocalIndex(state.physicalBattlerId);
+            if (state.specialBattlerId < MAX_BATTLERS_COUNT)
+                state.specialBattlerId = CanonicalBattlerLocalIndex(state.specialBattlerId);
+        }
+        if (!SnapshotAppend(buffer, offset, &state, sizeof(state)))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotApplyProtectStructs(const u8 *buffer, u32 length, u32 *offset)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct ProtectStruct state;
+        if (!SnapshotApply(buffer, length, offset, &state, sizeof(state)))
+            return FALSE;
+        if (CoopNet_Role() == 1)
+        {
+            if (state.physicalBattlerId < MAX_BATTLERS_COUNT)
+                state.physicalBattlerId = CanonicalBattlerLocalIndex(state.physicalBattlerId);
+            if (state.specialBattlerId < MAX_BATTLERS_COUNT)
+                state.specialBattlerId = CanonicalBattlerLocalIndex(state.specialBattlerId);
+        }
+        gProtectStructs[local] = state;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotAppendSpecialStatuses(u8 *buffer, u32 *offset)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct SpecialStatus state = gSpecialStatuses[local];
+        if (CoopNet_Role() == 1)
+        {
+            if (state.changedStatsBattlerId < MAX_BATTLERS_COUNT)
+                state.changedStatsBattlerId = CanonicalBattlerLocalIndex(state.changedStatsBattlerId);
+            if (state.instructedChosenTarget < MAX_BATTLERS_COUNT)
+                state.instructedChosenTarget = CanonicalBattlerLocalIndex(state.instructedChosenTarget);
+            if (state.dancerOriginalTarget < MAX_BATTLERS_COUNT)
+                state.dancerOriginalTarget = CanonicalBattlerLocalIndex(state.dancerOriginalTarget);
+        }
+        if (!SnapshotAppend(buffer, offset, &state, sizeof(state)))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotApplySpecialStatuses(const u8 *buffer, u32 length, u32 *offset)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct SpecialStatus state;
+        if (!SnapshotApply(buffer, length, offset, &state, sizeof(state)))
+            return FALSE;
+        if (CoopNet_Role() == 1)
+        {
+            if (state.changedStatsBattlerId < MAX_BATTLERS_COUNT)
+                state.changedStatsBattlerId = CanonicalBattlerLocalIndex(state.changedStatsBattlerId);
+            if (state.instructedChosenTarget < MAX_BATTLERS_COUNT)
+                state.instructedChosenTarget = CanonicalBattlerLocalIndex(state.instructedChosenTarget);
+            if (state.dancerOriginalTarget < MAX_BATTLERS_COUNT)
+                state.dancerOriginalTarget = CanonicalBattlerLocalIndex(state.dancerOriginalTarget);
+        }
+        gSpecialStatuses[local] = state;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotAppendBattlerStates(u8 *buffer, u32 *offset)
+{
+    u8 i, j;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct BattlerState state = gBattleStruct->battlerState[local];
+        if (CoopNet_Role() == 1)
+        {
+            u8 targets[MAX_BATTLERS_COUNT];
+            for (j = 0; j < MAX_BATTLERS_COUNT; j++)
+                targets[j] = state.targetsDone[CanonicalBattlerLocalIndex(j)];
+            memcpy(state.targetsDone, targets, sizeof(targets));
+            if (state.lastMoveTarget < MAX_BATTLERS_COUNT)
+                state.lastMoveTarget = CanonicalBattlerLocalIndex(state.lastMoveTarget);
+        }
+        if (!SnapshotAppend(buffer, offset, &state, sizeof(state)))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotApplyBattlerStates(const u8 *buffer, u32 length, u32 *offset)
+{
+    u8 i, j;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct BattlerState state;
+        if (!SnapshotApply(buffer, length, offset, &state, sizeof(state)))
+            return FALSE;
+        if (CoopNet_Role() == 1)
+        {
+            u8 targets[MAX_BATTLERS_COUNT];
+            memcpy(targets, state.targetsDone, sizeof(targets));
+            for (j = 0; j < MAX_BATTLERS_COUNT; j++)
+                state.targetsDone[CanonicalBattlerLocalIndex(j)] = targets[j];
+            if (state.lastMoveTarget < MAX_BATTLERS_COUNT)
+                state.lastMoveTarget = CanonicalBattlerLocalIndex(state.lastMoveTarget);
+        }
+        gBattleStruct->battlerState[local] = state;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotAppendEventState(u8 *buffer, u32 *offset)
+{
+    struct EventStates state = gBattleStruct->eventState;
+    if (CoopNet_Role() == 1)
+    {
+        if (state.endTurnBattler < MAX_BATTLERS_COUNT)
+            state.endTurnBattler = CanonicalBattlerLocalIndex(state.endTurnBattler);
+        if (state.moveEndBattler < MAX_BATTLERS_COUNT)
+            state.moveEndBattler = CanonicalBattlerLocalIndex(state.moveEndBattler);
+        if (state.faintedActionBattler < MAX_BATTLERS_COUNT)
+            state.faintedActionBattler = CanonicalBattlerLocalIndex(state.faintedActionBattler);
+        if (state.atkCancelerBattler < MAX_BATTLERS_COUNT)
+            state.atkCancelerBattler = CanonicalBattlerLocalIndex(state.atkCancelerBattler);
+        state.battlerSwitchIn = (state.battlerSwitchIn & ~3u)
+            | ((state.battlerSwitchIn & 1u) << 1)
+            | ((state.battlerSwitchIn & 2u) >> 1);
+    }
+    return SnapshotAppend(buffer, offset, &state, sizeof(state));
+}
+
+static bool8 SnapshotApplyEventState(const u8 *buffer, u32 length, u32 *offset)
+{
+    struct EventStates state;
+    if (!SnapshotApply(buffer, length, offset, &state, sizeof(state)))
+        return FALSE;
+    if (CoopNet_Role() == 1)
+    {
+        if (state.endTurnBattler < MAX_BATTLERS_COUNT)
+            state.endTurnBattler = CanonicalBattlerLocalIndex(state.endTurnBattler);
+        if (state.moveEndBattler < MAX_BATTLERS_COUNT)
+            state.moveEndBattler = CanonicalBattlerLocalIndex(state.moveEndBattler);
+        if (state.faintedActionBattler < MAX_BATTLERS_COUNT)
+            state.faintedActionBattler = CanonicalBattlerLocalIndex(state.faintedActionBattler);
+        if (state.atkCancelerBattler < MAX_BATTLERS_COUNT)
+            state.atkCancelerBattler = CanonicalBattlerLocalIndex(state.atkCancelerBattler);
+        state.battlerSwitchIn = (state.battlerSwitchIn & ~3u)
+            | ((state.battlerSwitchIn & 1u) << 1)
+            | ((state.battlerSwitchIn & 2u) >> 1);
+    }
+    gBattleStruct->eventState = state;
+    return TRUE;
+}
+
+static bool8 SnapshotAppendFutureSight(u8 *buffer, u32 *offset)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct FutureSight state = gBattleStruct->futureSight[local];
+        if (CoopNet_Role() == 1)
+        {
+            if (state.battlerIndex < MAX_BATTLERS_COUNT)
+                state.battlerIndex = CanonicalBattlerLocalIndex(state.battlerIndex);
+            if (state.partyIndex < PARTY_SIZE)
+                state.partyIndex = CanonicalPartyLocalIndex(state.partyIndex);
+        }
+        if (!SnapshotAppend(buffer, offset, &state, sizeof(state)))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotApplyFutureSight(const u8 *buffer, u32 length, u32 *offset)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct FutureSight state;
+        if (!SnapshotApply(buffer, length, offset, &state, sizeof(state)))
+            return FALSE;
+        if (CoopNet_Role() == 1)
+        {
+            if (state.battlerIndex < MAX_BATTLERS_COUNT)
+                state.battlerIndex = CanonicalBattlerLocalIndex(state.battlerIndex);
+            if (state.partyIndex < PARTY_SIZE)
+                state.partyIndex = CanonicalPartyLocalIndex(state.partyIndex);
+        }
+        gBattleStruct->futureSight[local] = state;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotAppendWish(u8 *buffer, u32 *offset)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct Wish state = gBattleStruct->wish[local];
+        if (i < 2 && state.partyId < PARTY_SIZE)
+            state.partyId = CanonicalPartyLocalIndex(state.partyId);
+        if (!SnapshotAppend(buffer, offset, &state, sizeof(state)))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static bool8 SnapshotApplyWish(const u8 *buffer, u32 length, u32 *offset)
+{
+    u8 i;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        u8 local = CanonicalBattlerLocalIndex(i);
+        struct Wish state;
+        if (!SnapshotApply(buffer, length, offset, &state, sizeof(state)))
+            return FALSE;
+        if (i < 2 && state.partyId < PARTY_SIZE)
+            state.partyId = CanonicalPartyLocalIndex(state.partyId);
+        gBattleStruct->wish[local] = state;
+    }
+    return TRUE;
+}
+
 static bool8 BuildBattleSnapshot(u8 *buffer, u32 *length)
 {
     u32 offset = 14;
