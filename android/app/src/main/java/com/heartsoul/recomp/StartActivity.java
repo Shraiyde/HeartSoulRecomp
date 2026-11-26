@@ -21,6 +21,7 @@ import android.view.WindowInsetsController;
  * choices only apply when the game starts.
  */
 public class StartActivity extends Activity implements StartScreenView.Listener {
+    private StartScreenView startScreenView;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -35,6 +36,7 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
         boolean hasSecondScreen = SecondScreen.find(this, display.getDisplayId()) != null;
         StartScreenView view = new StartScreenView(this, settings, size.x, size.y, hasSecondScreen,
                 "v" + versionName(), this);
+        startScreenView = view;
         setContentView(view);
         hideSystemBars();
         view.requestFocus();
@@ -54,10 +56,20 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
                     .setView(address)
                     .setPositiveButton("JOIN", (dialog, which) -> {
                         String host = address.getText().toString().trim();
-                        if (!host.isEmpty())
+                        if (!host.isEmpty()) {
                             launchGame("join", host);
+                        } else if (startScreenView != null) {
+                            startScreenView.resetStart();
+                        }
                     })
-                    .setNegativeButton("CANCEL", null)
+                    .setNegativeButton("CANCEL", (dialog, which) -> {
+                        if (startScreenView != null)
+                            startScreenView.resetStart();
+                    })
+                    .setOnCancelListener(dialog -> {
+                        if (startScreenView != null)
+                            startScreenView.resetStart();
+                    })
                     .show();
         } else if (coopMode == 1) {
             launchGame("host", null);
