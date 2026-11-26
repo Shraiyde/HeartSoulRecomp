@@ -1496,3 +1496,24 @@ State at end of session: repo created, nothing built yet, no code changed.
 - This prevents the status/UI polling path from blocking behind the serialized
   native lock when a ZeroTier connect operation is waiting on its timeout.
 - Source-level change; Android build and device responsiveness remain untested.
+
+
+## 2026-11-26: Verify UDP relay against native authentication
+
+- Traced the Android host relay through the native `HandleUdpDatagram`
+  implementation. The native host accepts UDP HELLO only after AES-GCM
+  authentication, protocol/version/length checks, and matching peer process
+  session plus client identity; only then does it emit UDP READY.
+- Confirmed the guest accepts UDP READY only when the echoed host process
+  session and client identity match its pinned TCP peer. Movement datagrams
+  are then accepted only from that authenticated endpoint.
+- Confirmed the Android relay's first-candidate reservation is compatible
+  with this handshake: the host cannot pin a candidate merely because it
+  sent an unauthenticated datagram; the first local response that causes
+  pinning is the native READY response after validation.
+- Reviewed reliable TCP queue behavior under receive-queue saturation:
+  phone sessions advance their receive watermark only after successful queue
+  insertion, so the sender receives no ACK for a dropped event and replays
+  it. Duplicate events are acknowledged without being enqueued twice.
+- This is a source-level protocol audit. No compiler, CI result, or physical
+  two-device test is available yet.
