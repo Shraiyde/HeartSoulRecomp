@@ -1229,9 +1229,9 @@ State at end of session: repo created, nothing built yet, no code changed.
 - Added a host-authored final battle snapshot with a checksum. It carries the
   same canonical party, battler, side-effect and action state as the per-turn
   snapshots, including the final battle outcome.
-- The guest now waits at the end-of-battle transition until that final state
-  arrives and applies cleanly. This closes the gap where the last turn could
-  diverge without another turn-start snapshot to repair it.
+- The guest applies the final snapshot, sends a reliable ACK, and waits for the
+  host's reliable commit before leaving the battle. This closes the gap where
+  the last turn could diverge without another turn-start snapshot to repair it.
 - The final wait is bounded at 60 seconds; failure enters the existing safe
   battle-abort/party-restore path rather than hanging indefinitely.
 - Still requires Android build and two-device validation.
