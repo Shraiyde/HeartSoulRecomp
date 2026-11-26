@@ -86,6 +86,52 @@ layer* above the existing TCP framing:
    rejection, timeout tests, and logs that never expose session keys or lobby
    secrets.
 
+## Audit of the current native transport (verified on `port`)
+
+The current implementation already separates the game thread from socket
+I/O with a worker thread and mutex-protected queues. It encrypts frames with
+AES-GCM, carries a per-frame counter in the nonce, and rejects a counter that
+is not newer than the last one received on that connection. It sends the
+latest position snapshot before draining up to eight queued gameplay
+messages per flush. The game layer currently uses these message types:
+
+| Message | Current use |
+|---|---|
+| 16 `POSITION` | Latest player map / coordinates / facing / follower / avatar snapshot. |
+| 17 `WORLD_FLAG` | Shared flag id and value packed into one word. |
+| 23 `SIO_MULTI` | Reserved in the header; no producer/consumer found in the audited `src/coop.c`. |
+| 24 `WORLD_VAR` | Shared variable id and value packed into one word. |
+| 25 `WORLD_READY` | Story-ready, battle-abort, background and foreground signals. |
+| 26 `WORLD_CONFIG` | Partner lead Pokémon summary. |
+| 27 `WORLD_CONFIG_ACK` | Declared for config acknowledgement; no active consumer found in the audited receive switch. |
+| 28 `SIO_RESYNC` | Declared; no active producer/consumer found in the audited `src/coop.c`. |
+| 29 `WORLD_CONFIG_BLOB` | Host sends challenge settings with a sequence; guest applies them before adventure start and replies with message 27. |
+| 30 `WORLD_RESYNC` | Requests a shared-world rescan. |
+| 31 `POSITION_RESYNC` | Requests position resync / shared-world rescan. |
+
+Important gaps before a PkMultiplayer-style resume layer can be considered
+complete:
+
+- The transport frame includes a 32-bit sequence in its plaintext header,
+  but the audited receive path does not use it for application-message ACKs,
+  duplicate suppression, or replay. The AES nonce counter is a per-connection
+  anti-replay check, not a reconnectable session sequence.
+- The outbound queue is bounded at 48 items. A failed send attempts to put
+  the item back; if the queue has filled meanwhile, the message is dropped.
+- The inbound queue drops its oldest item when full. That is unsafe for
+  story flags, variables, battle aborts and configuration messages unless
+  overflow is surfaced and those messages can be recovered.
+- Position and gameplay messages share one TCP stream. The position snapshot
+  is sent first on each flush, but this does not create ENet's independent
+  fast channel; large or stalled reliable traffic can still delay movement.
+- The existing story rescan and config blob are useful recovery mechanisms,
+  but they do not replace per-event identity and replay protection for
+  one-time rewards or battle outcomes.
+
+These are audit findings, not a claim that a two-phone failure has been
+reproduced. Fix them with host/guest protocol tests before changing battle
+semantics or adding more gameplay messages.
+
 ## Implementation order
 
 1. Audit the current `port` branch's `coop_net.c`, Android ZeroTier bridge,
