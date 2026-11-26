@@ -69,8 +69,8 @@ public final class HeartSoulZeroTier {
 
     private static final Object LOCK = new Object();
     // libzt reports errors through one global value shared by all threads, so
-    // socket calls from different threads must not overlap or they read each
-    // other's results. Every such call here is non-blocking and takes this lock.
+    // calls from different threads must not overlap or they read each other's
+    // results. All native calls take this lock; some operations may block.
     private static final Object ZT = new Object();
 
     private static int ztRead(int fd, byte[] buffer) {
@@ -337,6 +337,7 @@ public final class HeartSoulZeroTier {
         SocketAddress peer = null;
         SocketAddress candidatePeer = null;
         boolean peerPinned = false;
+        long candidateSinceMs = 0;
         long lastPeerPacketMs = 0;
         Generation live = () -> hostGeneration == generation;
         if (!awaitReady(live)) return;
@@ -355,10 +356,12 @@ public final class HeartSoulZeroTier {
                     peer = null;
                     candidatePeer = null;
                     peerPinned = false;
-                } else if (!peerPinned && candidatePeer != null && now - lastPeerPacketMs > 4500) {
-                    // Expire an unauthenticated candidate so a failed hello
-                    // cannot reserve the relay endpoint indefinitely.
+                } else if (!peerPinned && candidatePeer != null && now - candidateSinceMs > 4500) {
+                    // Use a fixed candidate window, not inactivity: an
+                    // unauthenticated sender must not hold the endpoint by
+                    // continuously sending invalid packets.
                     candidatePeer = null;
+                    candidateSinceMs = 0;
                 }
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -368,7 +371,10 @@ public final class HeartSoulZeroTier {
                             : (candidatePeer == null || candidatePeer.equals(source))) {
                         // Hold one candidate endpoint during the authenticated
                         // UDP hello. Other senders cannot redirect the reply.
-                        if (!peerPinned) candidatePeer = source;
+                        if (!peerPinned && candidatePeer == null) {
+                            candidatePeer = source;
+                            candidateSinceMs = System.currentTimeMillis();
+                        }
                         lastPeerPacketMs = System.currentTimeMillis();
                         byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
                                 packet.getOffset() + packet.getLength());
@@ -392,6 +398,7 @@ public final class HeartSoulZeroTier {
                         if (!peerPinned) {
                             peer = target;
                             peerPinned = true;
+                            candidateSinceMs = 0;
                             lastPeerPacketMs = System.currentTimeMillis();
                         }
                     }
