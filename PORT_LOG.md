@@ -1,5 +1,33 @@
 # Port log
 
+## 2026-11-26, pin host UDP candidate before authentication
+
+### Changed
+
+- The host UDP relay previously replaced its unauthenticated candidate endpoint
+  whenever any datagram arrived. A second sender could therefore redirect the
+  native host's authenticated UDP hello response before the relay pinned the
+  peer.
+- The relay now holds the first candidate endpoint while the native protocol
+  validates its hello. Other endpoints are ignored until that candidate is
+  authenticated or expires after 4.5 seconds of inactivity.
+- The authenticated peer remains pinned as before and is released after the
+  same idle timeout, allowing a later guest to join.
+
+### Verification
+
+- Reviewed the host relay state transitions in source. No Android build or
+  two-device test has run yet.
+
+### Next
+
+1. Check the branch-push Android build for Java compile errors.
+2. Test a normal UDP handshake and verify a second source cannot redirect it.
+3. Test an invalid hello followed by a valid guest after candidate expiry.
+4. Test authenticated peer timeout and reconnect.
+
+---
+
 ## 2026-11-26, serialize ZeroTier node initialization
 
 ### Changed
