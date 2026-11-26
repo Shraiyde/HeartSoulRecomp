@@ -219,7 +219,7 @@ static bool EncryptAndSend(int fd, int sender, const uint8_t *plain, size_t plai
     pthread_mutex_lock(&sMu);
     counter = sSendCounter++;
     pthread_mutex_unlock(&sMu);
-    StoreBe32(nonce, 0x100u | (uint32_t)sender);
+    StoreBe32(nonce, (uint32_t)sender);
     StoreBe64(nonce + 4, counter);
     if (CoopAesGcmEncrypt(sSessionKey, nonce, plain, plainLen, cipher, tag) != 0)
         return false;
@@ -277,7 +277,7 @@ static bool BuildUdpPacket(int sender, uint16_t type, const uint8_t *payload,
     pthread_mutex_lock(&sMu);
     counter = sUdpSendCounter++;
     pthread_mutex_unlock(&sMu);
-    StoreBe32(nonce, (uint32_t)sender);
+    StoreBe32(nonce, 0x100u | (uint32_t)sender);
     StoreBe64(nonce + 4, counter);
     if (CoopAesGcmEncrypt(sSessionKey, nonce, plain, plainLen, cipher, tag) != 0)
         return false;
