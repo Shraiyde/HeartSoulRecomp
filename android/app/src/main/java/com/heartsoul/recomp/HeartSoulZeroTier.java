@@ -248,11 +248,9 @@ public final class HeartSoulZeroTier {
     /** "state\taddress\tmessage"; state is stopped, starting, joining, ready or error. */
     public static String status() {
         String note = message;
-        // Asked live each time, and asked of the game's own network. The node
-        // reports itself "offline" about thirty seconds after starting, which
-        // only means it no longer hears ZeroTier's central servers; players
-        // stay linked to each other and the game carries on. Showing that as
-        // "Reconnecting..." was a false alarm that never went away.
+        // The background monitor refreshes the game's network transport
+        // state. Keep this UI-facing method lock-free: a native connect can
+        // hold the libzt lock while waiting for its timeout.
         if (ready && note.isEmpty() && !transportReadyCached)
             note = "Reconnecting...";
         return state + "\t" + address + "\t" + note;
