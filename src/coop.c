@@ -2425,7 +2425,7 @@ bool8 Coop_BattleSyncTurnStart(void)
         }
         if (!sBattleSetupApplied)
         {
-            u8 snapshot[2048];
+            u8 snapshot[4096];
             u32 snapshotLen;
             if (!BuildBattleSnapshot(snapshot, &snapshotLen)
                 || !CoopNet_SendBytes(COOP_MSG_BATTLE_SETUP, snapshot, snapshotLen))
