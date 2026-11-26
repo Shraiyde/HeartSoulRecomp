@@ -23,7 +23,7 @@
 
 #define COOP_PEER_MAGIC 0x4D504C4Bu
 #define COOP_PEER_VER   1
-#define COOP_PHONE_PROTOCOL 3
+#define COOP_PHONE_PROTOCOL 4
 #define COOP_MAX_FRAME  8192
 #define COOP_QUEUE      48
 #define COOP_RELIABLE_OUTBOX 2048
@@ -72,6 +72,9 @@ static bool sHaveKey;
 static char sClientId[20];
 static char sPeerClientId[20];
 static bool sHavePeerClientId;
+static char sSessionId[20];
+static char sPeerSessionId[20];
+static bool sHavePeerSessionId;
 
 static uint64_t CoopNowMs(void)
 {
@@ -657,23 +660,6 @@ static bool HelloProofForId(const char *clientId, char *out, size_t cap)
     return CoopBase64Encode(mac, 32, out, cap) > 0;
 }
 
-static bool VerifyHello(const char *line, char *clientIdOut, size_t clientIdCap)
-{
-    int version = 0;
-    char clientId[20];
-    char proof[80];
-    char expected[80];
-    if (sscanf(line, "HELLO %d %19s %79s", &version, clientId, proof) != 3
-        || version != COOP_PHONE_PROTOCOL)
-        return false;
-    if (strlen(clientId) < 8 || !HelloProofForId(clientId, expected, sizeof(expected)))
-        return false;
-    if (strcmp(proof, expected) != 0 || clientIdCap <= strlen(clientId))
-        return false;
-    memcpy(clientIdOut, clientId, strlen(clientId) + 1);
-    return true;
-}
-
 /* Both devices run the same encrypted, framed peer protocol. The phone that
  * opened the listening socket is role 0; the joining phone is role 1. */
 static uint64_t RandomCounter(void)
@@ -689,6 +675,90 @@ static uint64_t RandomCounter(void)
     if (value == 0)
         value = (CoopNowMs() << 16) ^ (uint64_t)getpid();
     return value | 1ull;
+}
+
+static bool HelloProofForSession(const char *kind, const char *clientId,
+                                  const char *sessionId, const char *peerSessionId,
+                                  uint32_t receivedSeq, char *out, size_t cap)
+{
+    uint8_t secret[32];
+    uint8_t mac[32];
+    char msg[128];
+    int n;
+    CoopSecretShared(secret);
+    n = snprintf(msg, sizeof(msg), "%s|%s|%s|%s|%u",
+                 kind, clientId, sessionId, peerSessionId, receivedSeq);
+    if (n <= 0 || (size_t)n >= sizeof(msg))
+    {
+        memset(secret, 0, sizeof(secret));
+        return false;
+    }
+    CoopHmacSha256(secret, sizeof(secret), (const uint8_t *)msg, (size_t)n, mac);
+    memset(secret, 0, sizeof(secret));
+    memset(msg, 0, sizeof(msg));
+    return CoopBase64Encode(mac, 32, out, cap) > 0;
+}
+
+static bool VerifyHello(const char *line, char *clientIdOut, size_t clientIdCap,
+                        char *sessionIdOut, size_t sessionIdCap,
+                        char *peerSessionIdOut, size_t peerSessionIdCap,
+                        uint32_t *receivedSeqOut)
+{
+    int version = 0;
+    unsigned int receivedSeq = 0;
+    char clientId[20], sessionId[20], peerSessionId[20], proof[80], expected[80];
+    if (sscanf(line, "HELLO %d %19s %19s %19s %u %79s",
+               &version, clientId, sessionId, peerSessionId, &receivedSeq, proof) != 6
+        || version != COOP_PHONE_PROTOCOL)
+        return false;
+    if (strlen(clientId) < 8 || strlen(sessionId) < 8
+        || (strcmp(peerSessionId, "-") != 0 && strlen(peerSessionId) < 8)
+        || clientIdCap <= strlen(clientId)
+        || sessionIdCap <= strlen(sessionId)
+        || peerSessionIdCap <= strlen(peerSessionId)
+        || !HelloProofForSession("hello", clientId, sessionId, peerSessionId,
+                                 (uint32_t)receivedSeq, expected, sizeof(expected))
+        || strcmp(proof, expected) != 0)
+        return false;
+    memcpy(clientIdOut, clientId, strlen(clientId) + 1);
+    memcpy(sessionIdOut, sessionId, strlen(sessionId) + 1);
+    memcpy(peerSessionIdOut, peerSessionId, strlen(peerSessionId) + 1);
+    *receivedSeqOut = (uint32_t)receivedSeq;
+    return true;
+}
+
+static void AckPending(uint32_t receivedSeq)
+{
+    pthread_mutex_lock(&sMu);
+    if (receivedSeq <= sReliableTxSeq)
+    {
+        while (sPendingCount > 0 && sPending[sPendingRead].seq <= receivedSeq)
+        {
+            sPendingRead = (sPendingRead + 1) % COOP_RELIABLE_OUTBOX;
+            sPendingCount--;
+        }
+    }
+    pthread_mutex_unlock(&sMu);
+}
+
+static void ResetReliableSession(void)
+{
+    pthread_mutex_lock(&sMu);
+    sReliableTxSeq = 0;
+    sReliableRxSeq = 0;
+    sPendingRead = sPendingWrite = sPendingCount = 0;
+    sOutRead = sOutWrite = sOutCount = 0;
+    sInRead = sInWrite = sInCount = 0;
+    sAckDirty = false;
+    pthread_mutex_unlock(&sMu);
+}
+
+static void CreateSessionId(void)
+{
+    uint64_t value = RandomCounter();
+    snprintf(sSessionId, sizeof(sSessionId), "%016llx", (unsigned long long)value);
+    sPeerSessionId[0] = '\0';
+    sHavePeerSessionId = false;
 }
 
 static void RunSession(int fd, int localRole, bool isHost)
