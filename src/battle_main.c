@@ -4381,6 +4381,19 @@ enum
     STATE_SELECTION_SCRIPT_MAY_RUN
 };
 
+static u8 CoopMirrorTarget(u8 target)
+{
+    enum BattlerPosition position;
+    if (target >= gBattlersCount)
+        return target;
+    position = GetBattlerPosition(target);
+    if (position == B_POSITION_PLAYER_LEFT)
+        position = B_POSITION_PLAYER_RIGHT;
+    else if (position == B_POSITION_PLAYER_RIGHT)
+        position = B_POSITION_PLAYER_LEFT;
+    return GetBattlerAtPosition(position);
+}
+
 static void HandleTurnActionSelectionState(void)
 {
     s32 i;
@@ -4516,7 +4529,7 @@ static void HandleTurnActionSelectionState(void)
                             && sCoopRemoteActionReady[battler])
                         {
                             gBattleResources->bufferB[battler][2] = sCoopRemoteAction[battler].data2;
-                            gBattleResources->bufferB[battler][3] = sCoopRemoteAction[battler].data3;
+                            gBattleResources->bufferB[battler][3] = CoopMirrorTarget(sCoopRemoteAction[battler].data3);
                             sCoopRemoteActionReady[battler] = FALSE;
                         }
                         else
