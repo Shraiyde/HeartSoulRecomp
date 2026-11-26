@@ -239,9 +239,9 @@ bool8 CoopNet_GetRemotePosition(struct CoopNetPosition *position)
     return TRUE;
 }
 
-bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing)
+bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing, u8 elevation, u16 graphicsId)
 {
-    u8 payload[8];
+    u8 payload[12];
     if (sState != COOP_NET_CONNECTED)
         return FALSE;
     payload[0] = mapGroup;
@@ -249,7 +249,10 @@ bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing)
     WriteU16(payload + 2, (u16)x);
     WriteU16(payload + 4, (u16)y);
     payload[6] = facing;
-    payload[7] = 0;
+    payload[7] = elevation;
+    WriteU16(payload + 8, graphicsId);
+    payload[10] = 0;
+    payload[11] = 0;
     return SendPacket(COOP_TYPE_POSITION, payload, sizeof(payload));
 }
 
@@ -408,7 +411,7 @@ static void HandlePacket(const u8 *packet, size_t size, const struct sockaddr_in
     {
         SendPacket(COOP_TYPE_PONG, NULL, 0);
     }
-    else if (type == COOP_TYPE_POSITION && payloadSize == 8)
+    else if (type == COOP_TYPE_POSITION && payloadSize == 12)
     {
         sRemotePosition.valid = TRUE;
         sRemotePosition.mapGroup = packet[COOP_HEADER_SIZE];
@@ -416,6 +419,8 @@ static void HandlePacket(const u8 *packet, size_t size, const struct sockaddr_in
         sRemotePosition.x = (s16)ReadU16(packet + COOP_HEADER_SIZE + 2);
         sRemotePosition.y = (s16)ReadU16(packet + COOP_HEADER_SIZE + 4);
         sRemotePosition.facing = packet[COOP_HEADER_SIZE + 6];
+        sRemotePosition.elevation = packet[COOP_HEADER_SIZE + 7];
+        sRemotePosition.graphicsId = ReadU16(packet + COOP_HEADER_SIZE + 8);
         sRemotePosition.receivedAtMs = now;
     }
 }
@@ -473,8 +478,8 @@ void CoopNet_Stop(void) {}
 void CoopNet_Poll(void) {}
 enum CoopNetState CoopNet_GetState(void) { return COOP_NET_DISCONNECTED; }
 bool8 CoopNet_IsConnected(void) { return FALSE; }
-bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing)
-{ (void)mapGroup; (void)mapNum; (void)x; (void)y; (void)facing; return FALSE; }
+bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing, u8 elevation, u16 graphicsId)
+{ (void)mapGroup; (void)mapNum; (void)x; (void)y; (void)facing; (void)elevation; (void)graphicsId; return FALSE; }
 bool8 CoopNet_GetRemotePosition(struct CoopNetPosition *position) { (void)position; return FALSE; }
 bool8 CoopNet_SendReliable(u8 messageType, const void *payload, u16 payloadSize)
 { (void)messageType; (void)payload; (void)payloadSize; return FALSE; }
