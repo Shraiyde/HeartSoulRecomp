@@ -1273,23 +1273,27 @@ bool8 Coop_BlockTrainerApproach(void)
 {
     if (Coop_BlockFieldEvent())
         return TRUE;
-    return sSessionLive && CoopNet_IsUp()
-        && (!Coop_IsStorySyncReady() || !Coop_PartnersNearby());
+    return sSessionLive && CoopNet_IsUp() && !Coop_IsStorySyncReady();
 }
 
 u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
 {
+    int role;
+
     if (!sSessionLive || !CoopNet_IsUp())
         return localDistance;
-    if (!Coop_IsStorySyncReady() || !Coop_PartnersNearby())
+    if (!Coop_IsStorySyncReady())
         return 0;
-    /* The host alone starts the shared trainer battle. The guest waits for
-     * the same battle transition instead of racing into a local AI battle. */
-    if (CoopNet_Role() != 0)
-        return 0;
+    if (!Coop_PartnersNearby())
+        return localDistance;
+    role = CoopNet_Role();
+    if (localDistance != 0 && partnerDistance != 0)
+        return role == 1 ? 0 : localDistance;
     if (localDistance != 0)
         return localDistance;
-    return partnerDistance;
+    if (partnerDistance != 0 && role == 0)
+        return partnerDistance;
+    return 0;
 }
 
 bool8 Coop_CopyPartnerTile(s16 *x, s16 *y)
