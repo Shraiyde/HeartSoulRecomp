@@ -101,7 +101,7 @@ static EWRAM_DATA bool8 sRemoteBattleSetupReady;
 static EWRAM_DATA u16 sRemoteBattleSetupEpoch;
 static EWRAM_DATA u16 sRemoteBattleSetupTurn;
 static EWRAM_DATA u16 sRemoteBattleSetupLen;
-static EWRAM_DATA u8 sRemoteBattleSetup[2048];
+static EWRAM_DATA u8 sRemoteBattleSetup[4096];
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
@@ -659,7 +659,7 @@ static void ResetGameSession(bool8 notifyPeer)
 static void HandleInbound(void)
 {
     u16 type;
-    u8 payload[2048];
+    u8 payload[4096];
     u32 len;
     u8 guard;
 
@@ -1717,7 +1717,7 @@ bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
     return TRUE;
 }
 
-STATIC_ASSERT(14 + sizeof(gPlayerParty) + sizeof(gEnemyParty) + sizeof(gBattleMons) + sizeof(gSideStatuses) + sizeof(gSideTimers) + sizeof(gProtectStructs) + sizeof(gSpecialStatuses) + sizeof(gBattleCommunication) + sizeof(gChosenActionByBattler) + sizeof(gChosenMoveByBattler) + sizeof(gBattleStruct->battlerState) + sizeof(gBattleStruct->partyState) + sizeof(gBattleStruct->eventState) + sizeof(gBattleStruct->futureSight) + sizeof(gBattleStruct->wish) + sizeof(gBattleStruct->battlerPartyIndexes) + sizeof(gBattleStruct->monToSwitchIntoId) + sizeof(gBattleStruct->battlerPartyOrders) + sizeof(gBattleStruct->chosenMovePositions) + sizeof(gBattleStruct->stateIdAfterSelScript) + sizeof(gBattleStruct->lastTakenMove) + sizeof(gBattleStruct->chosenItem) + sizeof(gBattleStruct->choicedMove) + sizeof(gBattleStruct->AI_monToSwitchIntoId) + sizeof(gBattleStruct->lastTakenMoveFrom) + sizeof(gBattleStruct->itemPartyIndex) + sizeof(gBattleStruct->itemMoveIndex) + sizeof(gBattleStruct->arenaMindPoints) + sizeof(gBattleStruct->arenaSkillPoints) + sizeof(gBattleStruct->arenaStartHp) + sizeof(gBattleStruct->runTries) + sizeof(gBattleStruct->savedTurnActionNumber) + sizeof(gBattleStruct->savedBattleTypeFlags) + sizeof(gBattleStruct->battlerPreventingSwitchout) + sizeof(gBattleStruct->abilityPreventingSwitchout) <= 2048, CoopBattleSetupTooLarge);
+STATIC_ASSERT(14 + sizeof(gPlayerParty) + sizeof(gEnemyParty) + sizeof(gBattleMons) + sizeof(gSideStatuses) + sizeof(gSideTimers) + sizeof(gProtectStructs) + sizeof(gSpecialStatuses) + sizeof(gBattleCommunication) + sizeof(gChosenActionByBattler) + sizeof(gChosenMoveByBattler) + sizeof(gBattleStruct->battlerState) + sizeof(gBattleStruct->partyState) + sizeof(gBattleStruct->eventState) + sizeof(gBattleStruct->futureSight) + sizeof(gBattleStruct->wish) + sizeof(gBattleStruct->battlerPartyIndexes) + sizeof(gBattleStruct->monToSwitchIntoId) + sizeof(gBattleStruct->battlerPartyOrders) + sizeof(gBattleStruct->chosenMovePositions) + sizeof(gBattleStruct->stateIdAfterSelScript) + sizeof(gBattleStruct->lastTakenMove) + sizeof(gBattleStruct->chosenItem) + sizeof(gBattleStruct->choicedMove) + sizeof(gBattleStruct->AI_monToSwitchIntoId) + sizeof(gBattleStruct->lastTakenMoveFrom) + sizeof(gBattleStruct->itemPartyIndex) + sizeof(gBattleStruct->itemMoveIndex) + sizeof(gBattleStruct->arenaMindPoints) + sizeof(gBattleStruct->arenaSkillPoints) + sizeof(gBattleStruct->arenaStartHp) + sizeof(gBattleStruct->runTries) + sizeof(gBattleStruct->savedTurnActionNumber) + sizeof(gBattleStruct->savedBattleTypeFlags) + sizeof(gBattleStruct->battlerPreventingSwitchout) + sizeof(gBattleStruct->abilityPreventingSwitchout) <= 4096, CoopBattleSetupTooLarge);
 
 static u32 HashBattleBytes(u32 hash, const void *data, u32 size)
 {
@@ -1796,7 +1796,7 @@ static u8 CanonicalPartyLocalIndex(u8 index)
 
 static bool8 SnapshotAppend(u8 *buffer, u32 *offset, const void *source, u32 size)
 {
-    if (*offset + size > 2048)
+    if (*offset + size > 4096)
         return FALSE;
     memcpy(buffer + *offset, source, size);
     *offset += size;
@@ -2338,7 +2338,7 @@ static bool8 ApplyBattleSnapshot(const u8 *buffer, u32 length)
 {
     u32 offset = 14;
     u32 flags;
-    if (buffer == NULL || length < 14 || length > 2048 || gBattleStruct == NULL)
+    if (buffer == NULL || length < 14 || length > 4096 || gBattleStruct == NULL)
         return FALSE;
     if ((((u16)buffer[0] << 8) | buffer[1]) != sBattleEpoch
         || (((u16)buffer[2] << 8) | buffer[3]) != sBattleTurn
@@ -2401,7 +2401,7 @@ static bool8 ApplyBattleSnapshot(const u8 *buffer, u32 length)
 
 static u32 BattleStateChecksum(void)
 {
-    u8 snapshot[2048];
+    u8 snapshot[4096];
     u32 length;
     if (!BuildBattleSnapshot(snapshot, &length))
         return 0;
