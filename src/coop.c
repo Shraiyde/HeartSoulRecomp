@@ -1639,7 +1639,7 @@ void Coop_OnBattleStarted(void)
     if (sRemoteBattleSeedEpoch != sBattleEpoch || sRemoteBattleSeedTurn != 0)
         sRemoteBattleSeedReady = FALSE;
     sBattleSetupApplied = FALSE;
-    if (sRemoteBattleSetupEpoch != sBattleEpoch)
+    if (sRemoteBattleSetupEpoch != sBattleEpoch || sRemoteBattleSetupTurn != 0)
         sRemoteBattleSetupReady = FALSE;
     memset(&sRemoteBattleAction, 0, sizeof(sRemoteBattleAction));
     sPartyCountBackup = gPlayerPartyCount;
