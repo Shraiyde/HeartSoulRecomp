@@ -2504,14 +2504,15 @@ bool8 Coop_BattleSyncTurnStart(void)
         {
             u8 snapshot[4096];
             u32 snapshotLen;
-            if (!BuildBattleSnapshot(snapshot, &snapshotLen)
-                || !CoopNet_SendBytes(COOP_MSG_BATTLE_SETUP, snapshot, snapshotLen))
+            if (!BuildBattleSnapshot(snapshot, &snapshotLen))
             {
                 sAbort = TRUE;
                 if (gBattleOutcome == 0)
                     gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
                 return FALSE;
             }
+            if (!CoopNet_SendBytes(COOP_MSG_BATTLE_SETUP, snapshot, snapshotLen))
+                return FALSE;
             sBattleSetupApplied = TRUE;
         }
         if (sBattleSeedSent)
