@@ -616,6 +616,45 @@ static u16 ReadBe16(const u8 *p)
     return (u16)((p[0] << 8) | p[1]);
 }
 
+static void ResetGameSession(bool8 notifyPeer)
+{
+    u8 empty = 0;
+
+    sRemoteReady = FALSE;
+    sPartnerLeadValid = FALSE;
+    sPartnerPartyValid = FALSE;
+    sReadyBurst = 0;
+    sConfigAckWait = 0;
+    sPeerSaveIdentityValid = FALSE;
+    sSaveIdentitySent = FALSE;
+    sSaveIdentityTimer = 0;
+    ResetScan();
+
+    sBattleSetupApplied = FALSE;
+    sRemoteBattleSetupReady = FALSE;
+    sBattleSeedSent = FALSE;
+    sRemoteBattleSeedReady = FALSE;
+    sRemoteBattleActionReady = FALSE;
+    sLocalBattleActionSent = FALSE;
+
+    if (sInBattle)
+    {
+        sNewPeerSession = TRUE;
+        sAbort = TRUE;
+        if (gBattleOutcome == 0)
+            gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+    }
+    else
+    {
+        sBattleEpoch = 0;
+        sBattleTurn = 0;
+        sNewPeerSession = FALSE;
+    }
+
+    if (notifyPeer && CoopNet_IsUp())
+        CoopNet_SendBytes(COOP_MSG_SESSION_RESET, &empty, 0);
+}
+
 static void HandleInbound(void)
 {
     u16 type;
