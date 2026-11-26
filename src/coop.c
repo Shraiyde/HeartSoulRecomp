@@ -2582,14 +2582,13 @@ bool8 Coop_BattleSyncFinalState(void)
 {
     if (!sInBattle || !sBattleHadLink)
         return TRUE;
+
     if (CoopNet_Role() == 0)
     {
-        if (sBattleFinalSent)
-            return TRUE;
+        if (!sBattleFinalSent)
         {
             u8 snapshot[4096];
             u32 snapshotLen;
-            u32 checksum;
             if (!BuildBattleSnapshot(snapshot, &snapshotLen) || snapshotLen + 4 > sizeof(snapshot))
             {
                 sAbort = TRUE;
@@ -2597,11 +2596,11 @@ bool8 Coop_BattleSyncFinalState(void)
                     gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
                 return TRUE;
             }
-            checksum = HashBattleBytes(2166136261u, snapshot, snapshotLen);
-            snapshot[snapshotLen] = (u8)(checksum >> 24);
-            snapshot[snapshotLen + 1] = (u8)(checksum >> 16);
-            snapshot[snapshotLen + 2] = (u8)(checksum >> 8);
-            snapshot[snapshotLen + 3] = (u8)checksum;
+            sBattleFinalChecksum = HashBattleBytes(2166136261u, snapshot, snapshotLen);
+            snapshot[snapshotLen] = (u8)(sBattleFinalChecksum >> 24);
+            snapshot[snapshotLen + 1] = (u8)(sBattleFinalChecksum >> 16);
+            snapshot[snapshotLen + 2] = (u8)(sBattleFinalChecksum >> 8);
+            snapshot[snapshotLen + 3] = (u8)sBattleFinalChecksum;
             if (!CoopNet_SendBytes(COOP_MSG_BATTLE_FINAL, snapshot, snapshotLen + 4))
             {
                 if (++sBattleFinalWaitFrames >= 3600)
@@ -2614,12 +2613,48 @@ bool8 Coop_BattleSyncFinalState(void)
                 return FALSE;
             }
             sBattleFinalSent = TRUE;
-            sBattleFinalWaitFrames = 0;
+        }
+
+        if (!sBattleFinalAcked)
+        {
+            if (++sBattleFinalWaitFrames >= 3600)
+            {
+                sAbort = TRUE;
+                if (gBattleOutcome == 0)
+                    gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+                return TRUE;
+            }
+            return FALSE;
+        }
+
+        if (!sBattleFinalCommitSent)
+        {
+            u8 commit[8];
+            commit[0] = (u8)(sBattleEpoch >> 8);
+            commit[1] = (u8)sBattleEpoch;
+            commit[2] = (u8)(sBattleTurn >> 8);
+            commit[3] = (u8)sBattleTurn;
+            commit[4] = (u8)(sBattleFinalChecksum >> 24);
+            commit[5] = (u8)(sBattleFinalChecksum >> 16);
+            commit[6] = (u8)(sBattleFinalChecksum >> 8);
+            commit[7] = (u8)sBattleFinalChecksum;
+            if (!CoopNet_SendBytes(COOP_MSG_BATTLE_FINAL_COMMIT, commit, sizeof(commit)))
+            {
+                if (++sBattleFinalWaitFrames >= 3600)
+                {
+                    sAbort = TRUE;
+                    if (gBattleOutcome == 0)
+                        gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+                    return TRUE;
+                }
+                return FALSE;
+            }
+            sBattleFinalCommitSent = TRUE;
         }
         return TRUE;
     }
 
-    if (sRemoteBattleFinalReady
+    if (!sBattleFinalApplied && sRemoteBattleFinalReady
         && sRemoteBattleFinalEpoch == sBattleEpoch
         && sRemoteBattleFinalTurn == sBattleTurn
         && sRemoteBattleFinalLen >= 18)
@@ -2635,11 +2670,50 @@ bool8 Coop_BattleSyncFinalState(void)
             sRemoteBattleFinalReady = FALSE;
             return TRUE;
         }
+        sBattleFinalChecksum = expected;
+        sBattleFinalApplied = TRUE;
         sRemoteBattleFinalReady = FALSE;
-        sBattleFinalWaitFrames = 0;
-        return TRUE;
     }
 
+    if (!sBattleFinalApplied)
+    {
+        if (++sBattleFinalWaitFrames >= 3600)
+        {
+            sAbort = TRUE;
+            if (gBattleOutcome == 0)
+                gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+            return TRUE;
+        }
+        return FALSE;
+    }
+
+    if (!sBattleFinalAckSent)
+    {
+        u8 ack[8];
+        ack[0] = (u8)(sBattleEpoch >> 8);
+        ack[1] = (u8)sBattleEpoch;
+        ack[2] = (u8)(sBattleTurn >> 8);
+        ack[3] = (u8)sBattleTurn;
+        ack[4] = (u8)(sBattleFinalChecksum >> 24);
+        ack[5] = (u8)(sBattleFinalChecksum >> 16);
+        ack[6] = (u8)(sBattleFinalChecksum >> 8);
+        ack[7] = (u8)sBattleFinalChecksum;
+        if (!CoopNet_SendBytes(COOP_MSG_BATTLE_FINAL_ACK, ack, sizeof(ack)))
+        {
+            if (++sBattleFinalWaitFrames >= 3600)
+            {
+                sAbort = TRUE;
+                if (gBattleOutcome == 0)
+                    gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+                return TRUE;
+            }
+            return FALSE;
+        }
+        sBattleFinalAckSent = TRUE;
+    }
+
+    if (sBattleFinalCommitReady)
+        return TRUE;
     if (++sBattleFinalWaitFrames >= 3600)
     {
         sAbort = TRUE;
