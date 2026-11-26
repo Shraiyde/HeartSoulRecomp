@@ -17,17 +17,10 @@ struct CoopBattleAction
     u8 switchIndex;
     u8 movePosition;
     u16 moveTarget;
-    u32 rngA;
-    u32 rngB;
-    u32 rngC;
-    u32 rngCtr;
-    u32 rng2A;
-    u32 rng2B;
-    u32 rng2C;
-    u32 rng2Ctr;
 };
 
 bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out);
+bool8 Coop_BattleSyncTurnStart(void);
 bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action);
 void Coop_BattleTurnComplete(void);
 
@@ -71,9 +64,9 @@ struct CoopBattleAction
     u8 switchIndex;
     u8 movePosition;
     u16 moveTarget;
-    u32 rngSeed;
 };
 static inline bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out) { (void)out; return FALSE; }
+static inline bool8 Coop_BattleSyncTurnStart(void) { return FALSE; }
 static inline bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action) { (void)action; return FALSE; }
 static inline void Coop_BattleTurnComplete(void) {}
 
