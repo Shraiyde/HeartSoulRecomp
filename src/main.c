@@ -25,6 +25,7 @@
 #include "trainer_hill.h"
 #include "test_runner.h"
 #include "platform.h"
+#include "coop_net.h"
 #include "constants/rgb.h"
 
 static void VBlankIntr(void);
@@ -101,6 +102,12 @@ void EnableVCountIntrAtLine150(void);
 void MainLoop()
 {
     ReadKeys();
+
+#ifdef PORTABLE
+    // Keep the peer transport serviced on the game thread. It is nonblocking:
+    // no DNS, waiting socket reads or retransmission sleeps occur here.
+    CoopNet_Poll();
+#endif
 
     if (gSoftResetDisabled == FALSE
      && JOY_HELD_RAW(A_BUTTON)
@@ -236,7 +243,6 @@ void SetMainCallback2(MainCallback callback)
 
 void StartTimer1(void)
 {
-
     REG_TM2CNT_L = 0;
     REG_TM2CNT_H = TIMER_ENABLE | TIMER_COUNTUP;
     REG_TM1CNT_H = TIMER_ENABLE;
@@ -245,7 +251,6 @@ void StartTimer1(void)
 void SeedRngAndSetTrainerId(void)
 {
     u32 val;
-
     REG_TM1CNT_H = 0;
     REG_TM2CNT_H = 0;
     val = ((u32)REG_TM2CNT_L) << 16;
