@@ -19,6 +19,7 @@
 #define COOP_MSG_BATTLE_ACTION     33
 #define COOP_MSG_BATTLE_SEED       34
 #define COOP_MSG_SESSION_RESET     35
+#define COOP_MSG_BATTLE_SETUP      37
 
 #define COOP_READY_STORY           1u
 #define COOP_READY_BATTLE_ABORT    2u
