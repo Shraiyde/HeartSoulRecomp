@@ -37,4 +37,11 @@ bool8 CoopNet_IsConnected(void);
 bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing);
 bool8 CoopNet_GetRemotePosition(struct CoopNetPosition *position);
 
+/* Reliable, ordered gameplay messages. The transport owns a bounded outbox
+ * until the peer acknowledges each message. The caller supplies an application
+ * message type and an opaque payload; PopMessage copies one received message. */
+#define COOP_NET_MESSAGE_MAX 240
+bool8 CoopNet_SendReliable(u8 messageType, const void *payload, u16 payloadSize);
+bool8 CoopNet_PopMessage(u8 *messageType, void *payload, u16 *payloadSize);
+
 #endif // GUARD_COOP_NET_H
