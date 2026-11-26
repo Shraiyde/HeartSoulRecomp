@@ -1717,7 +1717,7 @@ bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
     return TRUE;
 }
 
-STATIC_ASSERT(12 + sizeof(gEnemyParty) + 2 * sizeof(gBattleMons[0]) + sizeof(gBattleStruct->battlerPartyIndexes) + sizeof(gBattleStruct->monToSwitchIntoId) + sizeof(gBattleStruct->battlerPartyOrders) + sizeof(gBattleStruct->chosenMovePositions) + sizeof(gBattleStruct->moveTarget) + sizeof(gBattleStruct->itemPartyIndex) <= 1024, CoopBattleSetupTooLarge);
+STATIC_ASSERT(14 + sizeof(gPlayerParty) + sizeof(gEnemyParty) + sizeof(gBattleMons) + sizeof(gSideStatuses) + sizeof(gSideTimers) + sizeof(gChosenActionByBattler) + sizeof(gChosenMoveByBattler) + sizeof(gBattleStruct->partyState) + sizeof(gBattleStruct->battlerPartyIndexes) + sizeof(gBattleStruct->monToSwitchIntoId) + sizeof(gBattleStruct->battlerPartyOrders) + sizeof(gBattleStruct->chosenMovePositions) + sizeof(gBattleStruct->stateIdAfterSelScript) + sizeof(gBattleStruct->lastTakenMove) + sizeof(gBattleStruct->chosenItem) + sizeof(gBattleStruct->choicedMove) + sizeof(gBattleStruct->AI_monToSwitchIntoId) + sizeof(gBattleStruct->lastTakenMoveFrom) + sizeof(gBattleStruct->itemPartyIndex) + sizeof(gBattleStruct->itemMoveIndex) + sizeof(gBattleStruct->arenaMindPoints) + sizeof(gBattleStruct->arenaSkillPoints) + sizeof(gBattleStruct->arenaStartHp) + sizeof(gBattleStruct->runTries) + sizeof(gBattleStruct->savedTurnActionNumber) + sizeof(gBattleStruct->savedBattleTypeFlags) + sizeof(gBattleStruct->battlerPreventingSwitchout) + sizeof(gBattleStruct->abilityPreventingSwitchout) <= 2048, CoopBattleSetupTooLarge);
 
 static u32 HashBattleBytes(u32 hash, const void *data, u32 size)
 {
