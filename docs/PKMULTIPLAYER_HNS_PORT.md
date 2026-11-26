@@ -144,6 +144,10 @@ Game-layer work now added on top of that transport:
   battle turn. The guest pauses battle selection until it has applied the
   authoritative turn seed, so AI and battle resolution start from the same
   random state.
+- At battle end, the host sends one final authoritative snapshot with a
+  checksum. The guest holds the end-of-battle transition until it applies the
+  final party/HP/result state; a 60-second wait limit aborts safely if the
+  final state cannot be recovered.
 - At every turn boundary, the host sends a canonical battle snapshot: both
   player parties, the enemy party, all active battlers, side statuses/timers,
   protection and special-status flags, action/party bookkeeping, delayed
