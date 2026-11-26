@@ -1140,11 +1140,6 @@ static void RunSession(int fd, int localRole, bool isHost)
             close(fd);
             return;
         }
-        if (!sHavePeerClientId)
-        {
-            memcpy(sPeerClientId, peerId, strlen(peerId) + 1);
-            sHavePeerClientId = true;
-        }
         resume = sHavePeerSessionId
             && strcmp(sPeerSessionId, peerSessionId) == 0
             && strcmp(peerExpectedSession, sSessionId) == 0;
@@ -1176,6 +1171,11 @@ static void RunSession(int fd, int localRole, bool isHost)
             return;
         }
         memset(hello, 0, sizeof(hello));
+        if (!sHavePeerClientId)
+        {
+            memcpy(sPeerClientId, peerId, strlen(peerId) + 1);
+            sHavePeerClientId = true;
+        }
     }
     else
     {
