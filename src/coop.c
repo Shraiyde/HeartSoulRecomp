@@ -80,6 +80,10 @@ static EWRAM_DATA u16 sBattleTurn;
 static EWRAM_DATA bool8 sLocalBattleActionSent;
 static EWRAM_DATA bool8 sRemoteBattleActionReady;
 static EWRAM_DATA struct CoopBattleAction sRemoteBattleAction;
+static EWRAM_DATA bool8 sBattleSeedSent;
+static EWRAM_DATA bool8 sRemoteBattleSeedReady;
+static EWRAM_DATA rng_value_t sRemoteBattleRng;
+static EWRAM_DATA rng_value_t sRemoteBattleRng2;
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
@@ -648,7 +652,24 @@ static void HandleInbound(void)
             sPartnerMaxHp = (u16)(payload[16] | (payload[17] << 8));
             sPartnerLeadValid = sPartnerSpecies != SPECIES_NONE && sPartnerLevel != 0;
         }
-        else if (type == COOP_MSG_BATTLE_ACTION && len == 44)
+        else if (type == COOP_MSG_BATTLE_SEED && len == 36)
+        {
+            u16 epoch = ReadBe16(payload);
+            u16 turn = ReadBe16(payload + 2);
+            if (sInBattle && epoch == sBattleEpoch && turn == sBattleTurn)
+            {
+                sRemoteBattleRng.a = ReadBe32(payload + 4);
+                sRemoteBattleRng.b = ReadBe32(payload + 8);
+                sRemoteBattleRng.c = ReadBe32(payload + 12);
+                sRemoteBattleRng.ctr = ReadBe32(payload + 16);
+                sRemoteBattleRng2.a = ReadBe32(payload + 20);
+                sRemoteBattleRng2.b = ReadBe32(payload + 24);
+                sRemoteBattleRng2.c = ReadBe32(payload + 28);
+                sRemoteBattleRng2.ctr = ReadBe32(payload + 32);
+                sRemoteBattleSeedReady = TRUE;
+            }
+        }
+        else if (type == COOP_MSG_BATTLE_ACTION && len == 12)
         {
             u16 epoch = ReadBe16(payload);
             u16 turn = ReadBe16(payload + 2);
@@ -661,14 +682,6 @@ static void HandleInbound(void)
                 sRemoteBattleAction.switchIndex = payload[8];
                 sRemoteBattleAction.movePosition = payload[9];
                 sRemoteBattleAction.moveTarget = ReadBe16(payload + 10);
-                sRemoteBattleAction.rngA = ReadBe32(payload + 12);
-                sRemoteBattleAction.rngB = ReadBe32(payload + 16);
-                sRemoteBattleAction.rngC = ReadBe32(payload + 20);
-                sRemoteBattleAction.rngCtr = ReadBe32(payload + 24);
-                sRemoteBattleAction.rng2A = ReadBe32(payload + 28);
-                sRemoteBattleAction.rng2B = ReadBe32(payload + 32);
-                sRemoteBattleAction.rng2C = ReadBe32(payload + 36);
-                sRemoteBattleAction.rng2Ctr = ReadBe32(payload + 40);
                 sRemoteBattleActionReady = TRUE;
             }
         }
@@ -1343,6 +1356,8 @@ void Coop_Frame(void)
             sBattleTurn = 0;
             sLocalBattleActionSent = FALSE;
             sRemoteBattleActionReady = FALSE;
+            sBattleSeedSent = FALSE;
+            sRemoteBattleSeedReady = FALSE;
         }
         sReadyBurst = 0;
     }
@@ -1512,6 +1527,8 @@ void Coop_OnBattleStarted(void)
     sBattleTurn = 0;
     sLocalBattleActionSent = FALSE;
     sRemoteBattleActionReady = FALSE;
+    sBattleSeedSent = FALSE;
+    sRemoteBattleSeedReady = FALSE;
     memset(&sRemoteBattleAction, 0, sizeof(sRemoteBattleAction));
     sPartyCountBackup = gPlayerPartyCount;
     for (i = 0; i < PARTY_SIZE; i++)
@@ -1552,24 +1569,13 @@ bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out)
     if (out == NULL || !sInBattle || !sRemoteBattleActionReady)
         return FALSE;
     *out = sRemoteBattleAction;
-    if (CoopNet_Role() != 0)
-    {
-        gRngValue.a = out->rngA;
-        gRngValue.b = out->rngB;
-        gRngValue.c = out->rngC;
-        gRngValue.ctr = out->rngCtr;
-        gRng2Value.a = out->rng2A;
-        gRng2Value.b = out->rng2B;
-        gRng2Value.c = out->rng2C;
-        gRng2Value.ctr = out->rng2Ctr;
-    }
     sRemoteBattleActionReady = FALSE;
     return TRUE;
 }
 
 bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
 {
-    u8 wire[44];
+    u8 wire[12];
 
     if (action == NULL || !sInBattle || !CoopNet_IsUp())
         return FALSE;
@@ -1585,43 +1591,68 @@ bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
     wire[7] = action->data3;
     wire[8] = action->switchIndex;
     wire[9] = action->movePosition;
-    wire[10] = (u8)(action->moveTarget >> 8);
-    wire[11] = (u8)action->moveTarget;
-    wire[12] = (u8)(gRngValue.a >> 24);
-    wire[13] = (u8)(gRngValue.a >> 16);
-    wire[14] = (u8)(gRngValue.a >> 8);
-    wire[15] = (u8)gRngValue.a;
-    wire[16] = (u8)(gRngValue.b >> 24);
-    wire[17] = (u8)(gRngValue.b >> 16);
-    wire[18] = (u8)(gRngValue.b >> 8);
-    wire[19] = (u8)gRngValue.b;
-    wire[20] = (u8)(gRngValue.c >> 24);
-    wire[21] = (u8)(gRngValue.c >> 16);
-    wire[22] = (u8)(gRngValue.c >> 8);
-    wire[23] = (u8)gRngValue.c;
-    wire[24] = (u8)(gRngValue.ctr >> 24);
-    wire[25] = (u8)(gRngValue.ctr >> 16);
-    wire[26] = (u8)(gRngValue.ctr >> 8);
-    wire[27] = (u8)gRngValue.ctr;
-    wire[28] = (u8)(gRng2Value.a >> 24);
-    wire[29] = (u8)(gRng2Value.a >> 16);
-    wire[30] = (u8)(gRng2Value.a >> 8);
-    wire[31] = (u8)gRng2Value.a;
-    wire[32] = (u8)(gRng2Value.b >> 24);
-    wire[33] = (u8)(gRng2Value.b >> 16);
-    wire[34] = (u8)(gRng2Value.b >> 8);
-    wire[35] = (u8)gRng2Value.b;
-    wire[36] = (u8)(gRng2Value.c >> 24);
-    wire[37] = (u8)(gRng2Value.c >> 16);
-    wire[38] = (u8)(gRng2Value.c >> 8);
-    wire[39] = (u8)gRng2Value.c;
-    wire[40] = (u8)(gRng2Value.ctr >> 24);
-    wire[41] = (u8)(gRng2Value.ctr >> 16);
-    wire[42] = (u8)(gRng2Value.ctr >> 8);
-    wire[43] = (u8)gRng2Value.ctr;
     if (!CoopNet_SendBytes(COOP_MSG_BATTLE_ACTION, wire, sizeof(wire)))
         return FALSE;
     sLocalBattleActionSent = TRUE;
+    return TRUE;
+}
+
+bool8 Coop_BattleSyncTurnStart(void)
+{
+    u8 wire[36];
+
+    if (!sInBattle || !CoopNet_IsUp())
+        return FALSE;
+    if (CoopNet_Role() == 0)
+    {
+        if (sBattleSeedSent)
+            return TRUE;
+        wire[0] = (u8)(sBattleEpoch >> 8);
+        wire[1] = (u8)sBattleEpoch;
+        wire[2] = (u8)(sBattleTurn >> 8);
+        wire[3] = (u8)sBattleTurn;
+        wire[4] = (u8)(gRngValue.a >> 24);
+        wire[5] = (u8)(gRngValue.a >> 16);
+        wire[6] = (u8)(gRngValue.a >> 8);
+        wire[7] = (u8)gRngValue.a;
+        wire[8] = (u8)(gRngValue.b >> 24);
+        wire[9] = (u8)(gRngValue.b >> 16);
+        wire[10] = (u8)(gRngValue.b >> 8);
+        wire[11] = (u8)gRngValue.b;
+        wire[12] = (u8)(gRngValue.c >> 24);
+        wire[13] = (u8)(gRngValue.c >> 16);
+        wire[14] = (u8)(gRngValue.c >> 8);
+        wire[15] = (u8)gRngValue.c;
+        wire[16] = (u8)(gRngValue.ctr >> 24);
+        wire[17] = (u8)(gRngValue.ctr >> 16);
+        wire[18] = (u8)(gRngValue.ctr >> 8);
+        wire[19] = (u8)gRngValue.ctr;
+        wire[20] = (u8)(gRng2Value.a >> 24);
+        wire[21] = (u8)(gRng2Value.a >> 16);
+        wire[22] = (u8)(gRng2Value.a >> 8);
+        wire[23] = (u8)gRng2Value.a;
+        wire[24] = (u8)(gRng2Value.b >> 24);
+        wire[25] = (u8)(gRng2Value.b >> 16);
+        wire[26] = (u8)(gRng2Value.b >> 8);
+        wire[27] = (u8)gRng2Value.b;
+        wire[28] = (u8)(gRng2Value.c >> 24);
+        wire[29] = (u8)(gRng2Value.c >> 16);
+        wire[30] = (u8)(gRng2Value.c >> 8);
+        wire[31] = (u8)gRng2Value.c;
+        wire[32] = (u8)(gRng2Value.ctr >> 24);
+        wire[33] = (u8)(gRng2Value.ctr >> 16);
+        wire[34] = (u8)(gRng2Value.ctr >> 8);
+        wire[35] = (u8)gRng2Value.ctr;
+        if (!CoopNet_SendBytes(COOP_MSG_BATTLE_SEED, wire, sizeof(wire)))
+            return FALSE;
+        sBattleSeedSent = TRUE;
+        return TRUE;
+    }
+    if (!sRemoteBattleSeedReady)
+        return FALSE;
+    gRngValue = sRemoteBattleRng;
+    gRng2Value = sRemoteBattleRng2;
+    sRemoteBattleSeedReady = FALSE;
     return TRUE;
 }
 
@@ -1632,6 +1663,8 @@ void Coop_BattleTurnComplete(void)
     sBattleTurn++;
     sLocalBattleActionSent = FALSE;
     sRemoteBattleActionReady = FALSE;
+    sBattleSeedSent = FALSE;
+    sRemoteBattleSeedReady = FALSE;
 }
 
 bool8 Coop_BattleAbortPending(void)
