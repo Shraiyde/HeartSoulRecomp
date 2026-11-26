@@ -2068,9 +2068,15 @@ static bool8 BuildBattleSnapshot(u8 *buffer, u32 *length)
         || !SnapshotAppend(buffer, &offset, &gBattleStruct->runTries, sizeof(gBattleStruct->runTries))
         || !SnapshotAppend(buffer, &offset, &gBattleStruct->savedTurnActionNumber, sizeof(gBattleStruct->savedTurnActionNumber))
         || !SnapshotAppend(buffer, &offset, &gBattleStruct->savedBattleTypeFlags, sizeof(gBattleStruct->savedBattleTypeFlags))
-        || !SnapshotAppend(buffer, &offset, &gBattleStruct->battlerPreventingSwitchout, sizeof(gBattleStruct->battlerPreventingSwitchout))
         || !SnapshotAppend(buffer, &offset, &gBattleStruct->abilityPreventingSwitchout, sizeof(gBattleStruct->abilityPreventingSwitchout)))
         return FALSE;
+    {
+        enum BattlerId battler = gBattleStruct->battlerPreventingSwitchout;
+        if (CoopNet_Role() == 1 && battler < MAX_BATTLERS_COUNT)
+            battler = CanonicalBattlerLocalIndex((u8)battler);
+        if (!SnapshotAppend(buffer, &offset, &battler, sizeof(battler)))
+            return FALSE;
+    }
     *length = offset;
     return TRUE;
 }
@@ -2120,9 +2126,16 @@ static bool8 ApplyBattleSnapshot(const u8 *buffer, u32 length)
         || !SnapshotApply(buffer, length, &offset, &gBattleStruct->runTries, sizeof(gBattleStruct->runTries))
         || !SnapshotApply(buffer, length, &offset, &gBattleStruct->savedTurnActionNumber, sizeof(gBattleStruct->savedTurnActionNumber))
         || !SnapshotApply(buffer, length, &offset, &gBattleStruct->savedBattleTypeFlags, sizeof(gBattleStruct->savedBattleTypeFlags))
-        || !SnapshotApply(buffer, length, &offset, &gBattleStruct->battlerPreventingSwitchout, sizeof(gBattleStruct->battlerPreventingSwitchout))
         || !SnapshotApply(buffer, length, &offset, &gBattleStruct->abilityPreventingSwitchout, sizeof(gBattleStruct->abilityPreventingSwitchout)))
         return FALSE;
+    {
+        enum BattlerId battler;
+        if (!SnapshotApply(buffer, length, &offset, &battler, sizeof(battler)))
+            return FALSE;
+        if (CoopNet_Role() == 1 && battler < MAX_BATTLERS_COUNT)
+            battler = CanonicalBattlerLocalIndex((u8)battler);
+        gBattleStruct->battlerPreventingSwitchout = battler;
+    }
     return offset == length;
 }
 
