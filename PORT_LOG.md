@@ -1548,3 +1548,8 @@ State at end of session: repo created, nothing built yet, no code changed.
 - The parser now accepts only the port this build actually listens on.
 - This is a defensive compatibility check; branch-push CI is compiling the
   current branch, but the new Java change has not yet been verified by CI.
+
+
+- Follow-up lobby validation: entries already at capacity are now omitted
+  from the join list. The host advertises one occupied slot out of two, so
+  only lobbies with a free player slot are offered to guests.
