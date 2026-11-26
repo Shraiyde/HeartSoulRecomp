@@ -11,6 +11,8 @@
 - ZeroTier UDP receives use a 1 ms timeout while holding that lock; the local
   loopback side keeps its independent 100 ms timeout. TCP I/O is therefore
   not held behind a long UDP receive.
+- Readiness/status queries that can run concurrently with the relay are also
+  serialized through the same lock.
 - TCP listener setup and guest TCP connect operations now use that same lock.
 
 ### Not verified
