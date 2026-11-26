@@ -110,7 +110,11 @@ messages per flush. The game layer currently uses these message types:
 | 31 `POSITION_RESYNC` | Requests position resync / shared-world rescan. |
 
 The first reliability layer is now implemented on the direct-phone
-protocol (version 3):
+protocol (version 4):
+
+- The handshake carries authenticated process-session IDs and receive
+  watermarks. Both peers resume only when each recognizes the other's current
+  session; otherwise both discard stale transport queues and begin fresh.
 
 - Every reliable gameplay message receives a process-lifetime sequence number.
   The existing 32-bit frame sequence field is now consumed by the receiver.
@@ -168,7 +172,7 @@ PkMultiplayer transport behaviour.
 
 ## First native compatibility change
 
-The Android phone-to-phone handshake now advertises protocol version 3.
+The Android phone-to-phone handshake now advertises protocol version 4.
 Both peers prove their persistent client identity with the existing HMAC
 challenge. The host pins the first authenticated guest identity for the life
 of that host process; a different client cannot take over the same live host
@@ -178,10 +182,12 @@ reconnect must be the same peer/save identity, rather than silently attaching
 a different save to an existing shared world. The Windows PC-host handshake
 is intentionally unchanged.
 
-The phone transport now negotiates protocol version 3, pins the authenticated
-peer identity, retains sequenced gameplay messages until ACK, suppresses
-replayed duplicates, and replays unacknowledged messages after reconnect. It
-has not been compiled or tested on two Android devices. Phone builds using
+The phone transport now negotiates protocol version 4, authenticates device
+and process-session identities, exchanges receive watermarks during resume,
+and resets stale queues when either process has restarted. Reliable gameplay
+messages remain sequenced until ACK, duplicates are suppressed, and pending
+messages are replayed after reconnect. It has not been compiled or tested on
+two Android devices. Phone builds using
 protocol version 2 or earlier are not wire-compatible; both phones must use
 a build containing this change.
 
