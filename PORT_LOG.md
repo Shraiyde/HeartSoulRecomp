@@ -1164,3 +1164,23 @@ State at end of session: repo created, nothing built yet, no code changed.
   solo trainer battles when the partner is elsewhere.
 - These are still uncompiled source changes. No Android build or two-device
   co-op test has been verified.
+
+
+## 2026-11-26: Save identity and battle setup parity
+
+- Added a save fingerprint using trainer ID, player name/gender, and the save
+  encryption key. Both peers pin the other save identity; a save-slot change
+  sends a session reset, invalidates stale party/story readiness, and aborts
+  any battle that was running against the old save.
+- The host-authoritative first-turn setup now includes the generated enemy
+  party, active opponent battlers, battler count, battle flags/weather, and
+  per-battler party order/index, switch, move-target and item-target arrays.
+  The guest applies the host state with player battlers mirrored into its
+  local-left/remote-right layout.
+- The setup packet is bounded to 1,024 bytes with a compile-time size check.
+  The guest validates the double-battle shape before accepting it.
+- Per-turn checksum validation now covers the canonical player teams, active
+  battlers, enemy party, battle weather/flags/outcome, and battler party/action
+  bookkeeping. A mismatch safely aborts rather than letting two divergent
+  battles continue.
+- No Android compile or two-device verification has been completed.
