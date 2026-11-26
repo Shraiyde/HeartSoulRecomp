@@ -1487,3 +1487,12 @@ State at end of session: repo created, nothing built yet, no code changed.
   unauthenticated source endpoint is quarantined for 30 seconds. This prevents
   a continuous sender from immediately reacquiring the candidate slot on its
   next datagram; a different legitimate endpoint can still authenticate.
+
+
+## 2026-11-26: Keep ZeroTier status checks off the UI thread
+
+- `status()` now reads a cached transport state instead of calling libzt
+  directly. A background monitor refreshes the cache once per second.
+- This prevents the status/UI polling path from blocking behind the serialized
+  native lock when a ZeroTier connect operation is waiting on its timeout.
+- Source-level change; Android build and device responsiveness remain untested.
