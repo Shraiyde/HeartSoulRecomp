@@ -1328,6 +1328,13 @@ void Coop_Frame(void)
     {
         sRemoteReady = FALSE;
         sPartnerPartyValid = FALSE;
+        if (!sInBattle)
+        {
+            sBattleEpoch = 0;
+            sBattleTurn = 0;
+            sLocalBattleActionSent = FALSE;
+            sRemoteBattleActionReady = FALSE;
+        }
         sReadyBurst = 0;
     }
     sLinkWasUp = up;
@@ -1544,8 +1551,10 @@ bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
 {
     u8 wire[12];
 
-    if (action == NULL || !sInBattle || !CoopNet_IsUp() || sLocalBattleActionSent)
+    if (action == NULL || !sInBattle || !CoopNet_IsUp())
         return FALSE;
+    if (sLocalBattleActionSent)
+        return TRUE;
     wire[0] = (u8)(sBattleEpoch >> 8);
     wire[1] = (u8)sBattleEpoch;
     wire[2] = (u8)(sBattleTurn >> 8);
