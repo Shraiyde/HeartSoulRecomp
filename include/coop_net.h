@@ -19,6 +19,8 @@ struct CoopNetPosition
     s16 x;
     s16 y;
     u8 facing;
+    u8 elevation;
+    u16 graphicsId;
     u32 receivedAtMs;
 };
 
@@ -34,7 +36,7 @@ void CoopNet_Stop(void);
 void CoopNet_Poll(void);
 enum CoopNetState CoopNet_GetState(void);
 bool8 CoopNet_IsConnected(void);
-bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing);
+bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing, u8 elevation, u16 graphicsId);
 bool8 CoopNet_GetRemotePosition(struct CoopNetPosition *position);
 
 /* Reliable, ordered gameplay messages. The transport owns a bounded outbox
