@@ -303,6 +303,17 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
         uint32_t words[COOP_POSITION_WORDS];
         uint32_t n = payLen / 4;
         uint32_t i;
+        if (!sPcSession)
+        {
+            pthread_mutex_lock(&sMu);
+            if (seq <= sPositionRxSeq)
+            {
+                pthread_mutex_unlock(&sMu);
+                return;
+            }
+            sPositionRxSeq = seq;
+            pthread_mutex_unlock(&sMu);
+        }
         if (n > COOP_POSITION_WORDS)
             n = COOP_POSITION_WORDS;
         memset(words, 0, sizeof(words));
