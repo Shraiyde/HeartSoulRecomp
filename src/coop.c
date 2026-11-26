@@ -776,7 +776,10 @@ static void HandleInbound(void)
             u32 checksum = ReadBe32(payload + 4);
             if (sInBattle && epoch == sBattleEpoch && turn == sBattleTurn
                 && checksum == sBattleFinalChecksum && sBattleFinalSent)
+            {
                 sBattleFinalAcked = TRUE;
+                sBattleFinalWaitFrames = 0;
+            }
         }
         else if (type == COOP_MSG_BATTLE_FINAL_COMMIT && len == 8 && CoopNet_Role() == 1)
         {
@@ -2685,6 +2688,7 @@ bool8 Coop_BattleSyncFinalState(void)
         sBattleFinalChecksum = expected;
         sBattleFinalApplied = TRUE;
         sRemoteBattleFinalReady = FALSE;
+        sBattleFinalWaitFrames = 0;
     }
 
     if (!sBattleFinalApplied)
