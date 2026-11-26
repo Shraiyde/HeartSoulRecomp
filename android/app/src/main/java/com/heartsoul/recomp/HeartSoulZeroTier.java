@@ -319,6 +319,8 @@ public final class HeartSoulZeroTier {
         ZeroTierDatagramSocket zt = null;
         DatagramSocket local = null;
         SocketAddress peer = null;
+        SocketAddress candidatePeer = null;
+        boolean peerPinned = false;
         Generation live = () -> hostGeneration == generation;
         if (!awaitReady(live)) return;
         try {
@@ -334,21 +336,31 @@ public final class HeartSoulZeroTier {
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     synchronized (ZT) { zt.receive(packet); }
-                    peer = packet.getSocketAddress();
-                    byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
-                            packet.getOffset() + packet.getLength());
-                    local.send(new DatagramPacket(data, data.length, LOOPBACK, localPort));
+                    SocketAddress source = packet.getSocketAddress();
+                    if (!peerPinned || peer.equals(source)) {
+                        candidatePeer = source;
+                        byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
+                                packet.getOffset() + packet.getLength());
+                        local.send(new DatagramPacket(data, data.length, LOOPBACK, localPort));
+                    }
                 } catch (SocketTimeoutException ignored) {
                     // Check the generation and service the local side.
                 }
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     local.receive(packet);
-                    if (peer != null) {
+                    SocketAddress target = peerPinned ? peer : candidatePeer;
+                    if (target != null) {
                         byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
                                 packet.getOffset() + packet.getLength());
                         synchronized (ZT) {
-                            zt.send(new DatagramPacket(data, data.length, peer));
+                            zt.send(new DatagramPacket(data, data.length, target));
+                        }
+                        // The native host only answers a UDP hello after its
+                        // HMAC/session checks pass. Pin that authenticated peer.
+                        if (!peerPinned) {
+                            peer = target;
+                            peerPinned = true;
                         }
                     }
                 } catch (SocketTimeoutException ignored) {
