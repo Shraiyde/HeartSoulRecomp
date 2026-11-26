@@ -13,6 +13,47 @@ Rules for this log:
 
 ---
 
+## 2026-11-26, PkMultiplayer compatibility audit
+
+State: created branch `coop/pkmultiplayer-hns-adapter` from `port`.
+Added `docs/PKMULTIPLAYER_HNS_PORT.md` (commit
+`1784df568278498937e0ee3c69ab30eec7755865`). No game code was changed
+and no APK was built in this audit.
+
+### Verified
+
+- `Mochx07/PkMultiplayer` is a Lua mod for Gen2Recomped, not a standalone
+  multiplayer library. Its `manifest.json` declares the Gen2Recomped mod
+  API and its entry point patches Gen 1/2 Lua engine modules.
+- HeartSoulRecomp is a native C / SDL2 Android port of Heart & Soul 2.0.6,
+  based on the Gen 3 pokeemerald engine. It has no Gen2Recomped Lua mod
+  loader, so the PkMultiplayer ZIP and generated Lua patches cannot be
+  installed into this game.
+- The compatible engineering path is to port the feature behaviour and
+  session/reliability design into the existing native co-op, not to replace
+  the HnS engine or add a second incompatible game runtime.
+- PkMultiplayer's `src/coop/CoopNet.lua` provides useful protocol design:
+  reliable ordered gameplay messages, latest-only movement snapshots,
+  sequence numbers, ACKs, bounded outbox, duplicate suppression and a
+  resume handshake. HnS already has encrypted TCP frames and embedded
+  ZeroTier; TCP can remain the transport while those session semantics are
+  ported above it.
+- The new compatibility document maps the PkMultiplayer feature set to HnS
+  and records an implementation/test order.
+
+### Next
+
+1. Audit the current `port` branch transport and every `COOP_MSG_*`
+   producer/consumer, including Android host/join bridge and UI.
+2. Add protocol negotiation and reliable session sequence/ACK/resume to the
+   existing transport, with host/guest tests for replay and duplicate frames.
+3. Test two Android devices, including Wi-Fi loss/reconnect and a disconnect
+   during a trainer battle, before expanding to chat, emotes or joint catches.
+4. Keep APK distribution on GitHub Releases and do not call a compile-only
+   build a verified co-op release.
+
+---
+
 ## 2026-11-24, fullscreen touch layout
 
 State at end of session: `recomp-phone-2` (`108a25e9`) did contain the new
