@@ -1736,6 +1736,16 @@ void Coop_LeaveAbortedBattle(void)
     sAbort = FALSE;
     sInBattle = FALSE;
     sBattleHadLink = FALSE;
+    if (sNewPeerSession)
+    {
+        sBattleEpoch = 0;
+        sBattleTurn = 0;
+        sLocalBattleActionSent = FALSE;
+        sRemoteBattleActionReady = FALSE;
+        sBattleSeedSent = FALSE;
+        sRemoteBattleSeedReady = FALSE;
+        sNewPeerSession = FALSE;
+    }
     Coop_RestoreSharedBattleParty(TRUE);
     gPlayerPartyCount = sPartyCountBackup;
     for (i = 0; i < PARTY_SIZE; i++)
