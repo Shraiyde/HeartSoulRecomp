@@ -27,6 +27,7 @@
 #define COOP_HELLO_INTERVAL_MS 500
 #define COOP_PING_INTERVAL_MS 1000
 #define COOP_TIMEOUT_MS 6000
+#define COOP_CONNECT_TIMEOUT_MS 12000
 
 static int sSocket = -1;
 static enum CoopNetState sState = COOP_NET_DISCONNECTED;
@@ -35,6 +36,7 @@ static bool8 sHavePeer;
 static u32 sSequence;
 static u32 sLastReceive;
 static u32 sLastSend;
+static u32 sConnectStarted;
 static struct CoopNetPosition sRemotePosition;
 
 struct CoopReliableOut
@@ -177,6 +179,7 @@ bool8 CoopNet_Host(u16 port)
     sHavePeer = FALSE;
     sState = COOP_NET_LISTENING;
     sLastReceive = NowMs();
+    sConnectStarted = 0;
     return TRUE;
 }
 
@@ -199,6 +202,7 @@ bool8 CoopNet_Join(const char *ipv4, u16 port)
     sState = COOP_NET_CONNECTING;
     sLastReceive = NowMs();
     sLastSend = 0;
+    sConnectStarted = sLastReceive;
     return TRUE;
 }
 
@@ -209,6 +213,7 @@ void CoopNet_Stop(void)
     sSocket = -1;
     sState = COOP_NET_DISCONNECTED;
     sHavePeer = FALSE;
+    sConnectStarted = 0;
     sSequence = 0;
     sReliableSendSequence = 0;
     sReliableReceiveSequence = 0;
@@ -452,6 +457,11 @@ void CoopNet_Poll(void)
     }
 
     now = NowMs();
+    if (sState == COOP_NET_CONNECTING && now - sConnectStarted > COOP_CONNECT_TIMEOUT_MS)
+    {
+        CoopNet_Stop();
+        return;
+    }
     if (sState == COOP_NET_CONNECTED)
         FlushReliableOutbox();
 
@@ -486,4 +496,49 @@ bool8 CoopNet_SendReliable(u8 messageType, const void *payload, u16 payloadSize)
 bool8 CoopNet_PopMessage(u8 *messageType, void *payload, u16 *payloadSize)
 { (void)messageType; (void)payload; (void)payloadSize; return FALSE; }
 
+#endif
+
+#if defined(__ANDROID__)
+#include <jni.h>
+
+JNIEXPORT jboolean JNICALL
+Java_com_heartsoul_recomp_HeartSoulActivity_nativeCoopHost(JNIEnv *env, jclass clazz, jint port)
+{
+    (void)env;
+    (void)clazz;
+    return CoopNet_Host((u16)port) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_heartsoul_recomp_HeartSoulActivity_nativeCoopJoin(JNIEnv *env, jclass clazz, jstring address, jint port)
+{
+    const char *ipv4;
+    jboolean result;
+    (void)clazz;
+
+    if (address == NULL)
+        return JNI_FALSE;
+    ipv4 = (*env)->GetStringUTFChars(env, address, NULL);
+    if (ipv4 == NULL)
+        return JNI_FALSE;
+    result = CoopNet_Join(ipv4, (u16)port) ? JNI_TRUE : JNI_FALSE;
+    (*env)->ReleaseStringUTFChars(env, address, ipv4);
+    return result;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_heartsoul_recomp_HeartSoulActivity_nativeCoopState(JNIEnv *env, jclass clazz)
+{
+    (void)env;
+    (void)clazz;
+    return (jint)CoopNet_GetState();
+}
+
+JNIEXPORT void JNICALL
+Java_com_heartsoul_recomp_HeartSoulActivity_nativeCoopStop(JNIEnv *env, jclass clazz)
+{
+    (void)env;
+    (void)clazz;
+    CoopNet_Stop();
+}
 #endif
