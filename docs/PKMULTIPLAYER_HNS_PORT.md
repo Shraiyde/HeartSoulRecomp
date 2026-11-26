@@ -69,16 +69,16 @@ layer* above the existing TCP framing:
 2. Give each co-op save a stable identity and each running session a fresh
    session identifier. A restarted or unrelated save must not inherit a
    previous peer's pending events.
-3. Add a 64-bit reliable message sequence, highest-contiguous-received ACK,
+3. Add a reliable message sequence, highest-contiguous-received ACK,
    bounded retransmission outbox, and duplicate suppression. Persist only
    events that must survive app suspension/restart; never persist ephemeral
    position snapshots.
 4. Add a resume handshake carrying session identity and each side's last
    received sequence. Replay only missing reliable messages, in order.
 5. Keep position updates coalesced/latest-only so stale movement never blocks
-   story, battle, or control messages. TCP cannot provide ENet's independent
-   unreliable channel, so use a separate datagram path only if testing shows
-   that the current transport causes movement head-of-line stalls.
+   story, battle, or control messages. Phone protocol v5 now uses an
+   authenticated AES-GCM UDP datagram channel for movement, with sequenced
+   snapshots and a TCP fallback when the Android bridge cannot carry UDP.
 6. Preserve the existing background hold and disconnect/battle-abort safety
    rules. A reconnect must not duplicate rewards, trainer victories, catches,
    or trade commits.
@@ -115,8 +115,8 @@ The current direct-phone transport is protocol version 5:
   watermarks. Both peers resume only when each recognizes the other's current
   session; otherwise both discard stale transport queues and begin fresh.
 
-- Every reliable gameplay message receives a process-lifetime sequence number.
-  The existing 32-bit frame sequence field is now consumed by the receiver.
+- Every reliable gameplay message receives a process-lifetime 32-bit sequence
+  number. The existing frame sequence field is now consumed by the receiver.
 - The receiver accepts only the next contiguous message, suppresses duplicates,
   and ACKs the highest contiguous sequence it has actually queued for the game.
 - The sender retains unacknowledged messages in a 2,048-entry outbox, replays
@@ -149,7 +149,8 @@ Game-layer work now added on top of that transport:
   protection and special-status flags, action/party bookkeeping, delayed
   effects, and battle metadata. The guest remaps host/guest battler and party
   indexes into its local layout before applying the snapshot and checking the
-  turn checksum. This provides turn-boundary state repair before RNG/AI work.
+  turn checksum. The snapshot is bounded by a 4 KiB compile-time assertion
+  and runtime payload checks, and repairs state before RNG/AI work.
 - Battle action and seed packets are tagged with a battle epoch and turn.
   One-turn-ahead packets are buffered to tolerate small timing differences
   between phones.
@@ -172,8 +173,9 @@ Game-layer work now added on top of that transport:
   If it does not, the built-in TCP fallback preserves movement but can still
   experience head-of-line blocking.
 - Message-specific idempotency keys for irreversible game effects (rewards,
-  catches and trade commits), plus battle-state checksums/resync after a
-  deterministic divergence, are still needed above transport.
+  catches and trade commits) are still needed above transport. Battle state is
+  repaired and checksummed at turn boundaries; mid-move rollback is not yet
+  implemented.
 - The existing story rescan and config blob are useful recovery mechanisms,
   but they do not replace per-event identity and replay protection for
   one-time rewards or battle outcomes.
