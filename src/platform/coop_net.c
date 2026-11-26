@@ -625,8 +625,6 @@ static void HandleUdpDatagram(int fd, int localRole, int remoteRole, bool isHost
     if (type == COOP_MSG_UDP_READY && !isHost && payLen == 40)
     {
         char peerSession[20], peerId[20];
-        if (!*haveUdpPeer || !SameUdpPeer(from, udpPeer))
-            return;
         memcpy(peerSession, payload, 20);
         memcpy(peerId, payload + 20, 20);
         peerSession[19] = '\0';
@@ -634,6 +632,8 @@ static void HandleUdpDatagram(int fd, int localRole, int remoteRole, bool isHost
         if (strcmp(peerSession, sPeerSessionId) != 0
             || strcmp(peerId, sPeerClientId) != 0)
             return;
+        *udpPeer = *from;
+        *haveUdpPeer = true;
         *udpReady = true;
         *lastUdpRx = now;
         return;
