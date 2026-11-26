@@ -708,33 +708,24 @@ static void HandleInbound(void)
             sPartnerMaxHp = (u16)(payload[16] | (payload[17] << 8));
             sPartnerLeadValid = sPartnerSpecies != SPECIES_NONE && sPartnerLevel != 0;
         }
+        else if (type == COOP_MSG_SAVE_ID && len == 4)
+        {
+            u32 identity = ReadBe32(payload);
+            if (!sPeerSaveIdentityValid)
+            {
+                sPeerSaveIdentity = identity;
+                sPeerSaveIdentityValid = TRUE;
+            }
+            else if (sPeerSaveIdentity != identity)
+            {
+                ResetGameSession(TRUE);
+                sPeerSaveIdentity = identity;
+                sPeerSaveIdentityValid = TRUE;
+            }
+        }
         else if (type == COOP_MSG_SESSION_RESET && len == 0)
         {
-            sRemoteReady = FALSE;
-            sPartnerLeadValid = FALSE;
-            sPartnerPartyValid = FALSE;
-            sReadyBurst = 0;
-            sConfigAckWait = 0;
-            ResetScan();
-            sNewPeerSession = TRUE;
-            if (sInBattle)
-            {
-                sAbort = TRUE;
-                if (gBattleOutcome == 0)
-                    gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
-            }
-            else
-            {
-                sBattleEpoch = 0;
-                sBattleTurn = 0;
-                sLocalBattleActionSent = FALSE;
-                sRemoteBattleActionReady = FALSE;
-                sBattleSeedSent = FALSE;
-                sRemoteBattleSeedReady = FALSE;
-                sBattleSetupApplied = FALSE;
-                sRemoteBattleSetupReady = FALSE;
-                sNewPeerSession = FALSE;
-            }
+            ResetGameSession(FALSE);
         }
         else if (type == COOP_MSG_BATTLE_SETUP && len <= sizeof(sRemoteBattleSetup) && len >= 12)
         {
