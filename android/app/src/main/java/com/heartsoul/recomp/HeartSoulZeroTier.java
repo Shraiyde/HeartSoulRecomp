@@ -487,6 +487,7 @@ public final class HeartSoulZeroTier {
                                      final int remotePort, final DatagramSocket local) {
         ZeroTierDatagramSocket zt = null;
         SocketAddress localPeer = null;
+        long lastLocalPacketMs = 0;
         Generation live = () -> joinGeneration == generation;
         if (!awaitReady(live)) {
             local.close();
@@ -502,14 +503,20 @@ public final class HeartSoulZeroTier {
             }
             byte[] buffer = new byte[2048];
             while (live.current() && !local.isClosed()) {
+                if (localPeer != null && System.currentTimeMillis() - lastLocalPacketMs > 4500)
+                    localPeer = null;
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     local.receive(packet);
-                    localPeer = packet.getSocketAddress();
-                    byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
-                            packet.getOffset() + packet.getLength());
-                    synchronized (ZT) {
-                        zt.send(new DatagramPacket(data, data.length, remote, remotePort));
+                    SocketAddress source = packet.getSocketAddress();
+                    if (localPeer == null || localPeer.equals(source)) {
+                        localPeer = source;
+                        lastLocalPacketMs = System.currentTimeMillis();
+                        byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
+                                packet.getOffset() + packet.getLength());
+                        synchronized (ZT) {
+                            zt.send(new DatagramPacket(data, data.length, remote, remotePort));
+                        }
                     }
                 } catch (SocketTimeoutException ignored) {
                     // Check the generation and service the ZeroTier side.
