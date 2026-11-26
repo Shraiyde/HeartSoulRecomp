@@ -1956,6 +1956,8 @@ void Coop_LeaveAbortedBattle(void)
         sRemoteBattleActionReady = FALSE;
         sBattleSeedSent = FALSE;
         sRemoteBattleSeedReady = FALSE;
+        sBattleSetupApplied = FALSE;
+        sRemoteBattleSetupReady = FALSE;
         sNewPeerSession = FALSE;
     }
     Coop_RestoreSharedBattleParty(TRUE);
