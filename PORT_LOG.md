@@ -65,6 +65,10 @@ source. The Android build and two-device path are still unverified.
   relay instead of the unrelated TCP loopback endpoint.
 - The guest ZeroTier datagram socket binds to the same allowed game port as
   the host, keeping return traffic within the ad-hoc network's port range.
+- The host relay pins its remote UDP endpoint only after the native host
+  replies to an authenticated UDP hello, rejects other endpoints while pinned,
+  and releases the pin after 4.5 seconds without peer datagrams so a new guest
+  can join after the previous session ends.
 - UDP is optional: if the guest cannot bind its loopback relay, the TCP
   connection still opens and the native transport falls back to TCP positions.
 - Native UDP socket creation now uses the Java-provided relay port for guests.
