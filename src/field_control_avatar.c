@@ -1,4 +1,5 @@
 #include "global.h"
+#include "coop_player.h"
 #include "battle_setup.h"
 #include "bike.h"
 #include "bug_contest.h"
@@ -174,6 +175,7 @@ void FieldGetPlayerInput(struct FieldInput *input, u16 newKeys, u16 heldKeys)
 
 int ProcessPlayerFieldInput(struct FieldInput *input)
 {
+    CoopPlayer_Update();
     struct MapPosition position;
     enum Direction playerDirection;
     u16 metatileBehavior;
