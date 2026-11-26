@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-coop-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-debug:
     runs-on: ubuntu-24.04-arm
