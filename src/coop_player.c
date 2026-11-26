@@ -67,9 +67,10 @@ void CoopPlayer_Update(void)
         && (sRemoteMapNum != remote.mapNum || sRemoteMapGroup != remote.mapGroup))
         RemoveRemoteAvatar();
 
-    if (!TryGetObjectEventIdByLocalIdAndMap(COOP_REMOTE_LOCAL_ID,
-                                             remote.mapNum, remote.mapGroup,
-                                             &objectEventId))
+    /* This engine's TryGet helper returns TRUE when the object is absent. */
+    if (TryGetObjectEventIdByLocalIdAndMap(COOP_REMOTE_LOCAL_ID,
+                                            remote.mapNum, remote.mapGroup,
+                                            &objectEventId))
     {
         objectEventId = SpawnSpecialObjectEventParameterized(
             remote.graphicsId, MOVEMENT_TYPE_NONE, COOP_REMOTE_LOCAL_ID,
