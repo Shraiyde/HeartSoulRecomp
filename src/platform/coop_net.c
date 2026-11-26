@@ -72,6 +72,7 @@ static bool sHaveKey;
 static char sClientId[20];
 static char sPeerClientId[20];
 static bool sHavePeerClientId;
+static uint64_t sPeerPinExpiresAtMs;
 static char sSessionId[20];
 static char sPeerSessionId[20];
 static bool sHavePeerSessionId;
@@ -774,6 +775,19 @@ static void QueueSessionReset(void)
     pthread_mutex_unlock(&sMu);
 }
 
+static void ExpirePeerPinIfNeeded(void)
+{
+    if (sHavePeerClientId && sPeerPinExpiresAtMs != 0
+        && CoopNowMs() >= sPeerPinExpiresAtMs)
+    {
+        sHavePeerClientId = false;
+        sHavePeerSessionId = false;
+        sPeerClientId[0] = '\0';
+        sPeerSessionId[0] = '\0';
+        sPeerPinExpiresAtMs = 0;
+    }
+}
+
 static void RunSession(int fd, int localRole, bool isHost)
 {
     char line[160];
@@ -794,6 +808,7 @@ static void RunSession(int fd, int localRole, bool isHost)
     if (isHost)
     {
         bool resume;
+        ExpirePeerPinIfNeeded();
         if (!ReadLine(fd, line, sizeof(line))
             || !VerifyHello(line, peerId, sizeof(peerId),
                             peerSessionId, sizeof(peerSessionId),
@@ -908,6 +923,7 @@ static void RunSession(int fd, int localRole, bool isHost)
         {
             int version = 0;
             unsigned int hostReceivedSeq = 0;
+            ExpirePeerPinIfNeeded();
             char hostId[20], hostSessionId[20], hostPeerSessionId[20];
             char hostProof[80], expected[80];
             bool resume;
@@ -946,6 +962,7 @@ static void RunSession(int fd, int localRole, bool isHost)
         }
     }
 
+    sPeerPinExpiresAtMs = 0;
     pthread_mutex_lock(&sMu);
     sRole = localRole;
     sLinkUp = true;
@@ -1104,6 +1121,8 @@ static void RunSession(int fd, int localRole, bool isHost)
     }
 down:
     NoteLink(false);
+    if (!sPcSession && sHavePeerClientId)
+        sPeerPinExpiresAtMs = CoopNowMs() + 60000;
     close(fd);
     fprintf(stderr, "co-op: direct phone link down\n");
 }
