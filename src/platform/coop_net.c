@@ -753,6 +753,8 @@ static void ResetReliableSession(void)
     pthread_mutex_lock(&sMu);
     sReliableTxSeq = 0;
     sReliableRxSeq = 0;
+    sPositionTxSeq = 0;
+    sPositionRxSeq = 0;
     sPendingRead = sPendingWrite = sPendingCount = 0;
     sOutRead = sOutWrite = sOutCount = 0;
     sInRead = sInWrite = sInCount = 0;
