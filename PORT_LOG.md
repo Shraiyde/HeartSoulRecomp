@@ -1184,3 +1184,22 @@ State at end of session: repo created, nothing built yet, no code changed.
   bookkeeping. A mismatch safely aborts rather than letting two divergent
   battles continue.
 - No Android compile or two-device verification has been completed.
+
+
+## 2026-11-26: Independent movement channel and partner lease
+
+- Advanced the phone wire protocol to v5.
+- Added a separate AES-GCM UDP channel for latest-only movement snapshots.
+  UDP HELLO/READY packets prove the current device and process-session IDs;
+  movement packets have their own nonce domain and monotonically increasing
+  snapshot sequence. Replayed/out-of-order snapshots are dropped.
+- The host learns the guest's UDP endpoint only from an authenticated HELLO;
+  the guest pins the host endpoint from an authenticated READY. The channel
+  is polled at 20 Hz and sends snapshots at up to 10 Hz.
+- TCP remains the reliable gameplay channel. If UDP cannot be established or
+  goes stale, movement falls back to the existing TCP snapshot path.
+- The peer device pin now expires after the same 60-second reconnect window,
+  allowing a different partner to join after the previous session expires.
+- UDP forwarding through the Android ZeroTier bridge is not yet verified.
+  The fallback keeps the existing connection usable if the bridge does not
+  carry UDP. No Android compile or two-device test has been completed.
