@@ -250,18 +250,25 @@ public final class HeartSoulZeroTier {
                 if (!awaitReady(live)) return;
                 ZeroTierSocket server;
                 try {
-                    server = new ZeroTierSocket(ZeroTierNative.ZTS_AF_INET6, ZeroTierNative.ZTS_SOCK_STREAM, 0);
+                    synchronized (ZT) {
+                        server = new ZeroTierSocket(ZeroTierNative.ZTS_AF_INET6, ZeroTierNative.ZTS_SOCK_STREAM, 0);
+                    }
                 } catch (Exception error) {
                     Log.e(TAG, "host socket failed", error);
                     return;
                 }
                 int listener = server.getNativeFileDescriptor();
                 try {
-                    ZeroTierNative.zts_set_reuse_addr(listener, 1);
-                    int error = ZeroTierNative.zts_bind(listener, "::", ztPort);
+                    int error;
+                    synchronized (ZT) {
+                        ZeroTierNative.zts_set_reuse_addr(listener, 1);
+                        error = ZeroTierNative.zts_bind(listener, "::", ztPort);
+                        if (error >= 0) {
+                            server.listen(8);
+                            ZeroTierNative.zts_set_blocking(listener, 0);
+                        }
+                    }
                     if (error < 0) { Log.e(TAG, "host bind failed " + error); return; }
-                    server.listen(8);
-                    ZeroTierNative.zts_set_blocking(listener, 0);
                     while (live.current()) {
                         int accepted;
                         try {
@@ -411,9 +418,15 @@ public final class HeartSoulZeroTier {
                         if (!awaitReady(live)) { closeQuietly(local); break; }
                         Log.i(TAG, "join: connecting to " + remoteAddress + " port " + remotePort);
                         long began = System.currentTimeMillis();
-                        int remote = ZeroTierNative.zts_bsd_socket(ZeroTierNative.ZTS_AF_INET6, ZeroTierNative.ZTS_SOCK_STREAM, 0);
+                        int remote;
+                        synchronized (ZT) {
+                            remote = ZeroTierNative.zts_bsd_socket(ZeroTierNative.ZTS_AF_INET6, ZeroTierNative.ZTS_SOCK_STREAM, 0);
+                        }
                         if (remote < 0) { closeQuietly(local); continue; }
-                        int error = ZeroTierNative.zts_connect(remote, remoteAddress, remotePort, CONNECT_TIMEOUT_MS);
+                        int error;
+                        synchronized (ZT) {
+                            error = ZeroTierNative.zts_connect(remote, remoteAddress, remotePort, CONNECT_TIMEOUT_MS);
+                        }
                         if (error < 0) {
                             Log.w(TAG, "ZeroTier connect failed " + error);
                             ztClose(remote);
@@ -534,8 +547,10 @@ public final class HeartSoulZeroTier {
                 try {
                     local.setTcpNoDelay(true);
                     local.setSoTimeout(1);
-                    ZeroTierNative.zts_set_no_delay(remote, 1);
-                    ZeroTierNative.zts_set_blocking(remote, 0);
+                    synchronized (ZT) {
+                        ZeroTierNative.zts_set_no_delay(remote, 1);
+                        ZeroTierNative.zts_set_blocking(remote, 0);
+                    }
                     InputStream in = local.getInputStream();
                     OutputStream out = local.getOutputStream();
                     // Small steps with a 1 ms pause between them: a large message
