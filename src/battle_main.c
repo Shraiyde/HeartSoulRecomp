@@ -6067,6 +6067,8 @@ static void HandleEndTurn_FinishBattle(void)
             OneTypeChallengeCaptureBlocked = FALSE;
         }
 
+        if (!Coop_BattleAbortPending() && !Coop_BattleSyncFinalState())
+            return;
         if (!Coop_BattleAbortPending())
             Coop_FinishSharedBattle();
 
