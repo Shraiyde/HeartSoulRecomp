@@ -173,6 +173,7 @@ public class HeartSoulActivity extends SDLActivity {
             android.system.Os.setenv("HNS_COOP_MODE", coopMode, true);
             android.system.Os.setenv("HNS_COOP_ADDRESS", coopAddress == null ? "" : coopAddress, true);
             android.system.Os.setenv("HNS_COOP_PORT", Integer.toString(coopPort), true);
+            android.system.Os.setenv("HNS_COOP_UDP_PORT", Integer.toString("join".equals(coopMode) ? CoopNetwork.joinUdpPort() : 0), true);
         } catch (android.system.ErrnoException e) {
             Log.w(TAG, "could not configure direct co-op", e);
         }
