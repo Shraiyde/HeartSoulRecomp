@@ -315,15 +315,18 @@ public final class HeartSoulZeroTier {
         Generation live = () -> hostGeneration == generation;
         if (!awaitReady(live)) return;
         try {
-            zt = new ZeroTierDatagramSocket(ztPort);
-            zt.setSoTimeout(100);
+            synchronized (ZT) {
+                zt = new ZeroTierDatagramSocket(ztPort);
+                // Keep the shared libzt lock out of long blocking receives.
+                zt.setSoTimeout(1);
+            }
             local = new DatagramSocket(0, LOOPBACK);
             local.setSoTimeout(100);
             byte[] buffer = new byte[2048];
             while (live.current()) {
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    zt.receive(packet);
+                    synchronized (ZT) { zt.receive(packet); }
                     peer = packet.getSocketAddress();
                     byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
                             packet.getOffset() + packet.getLength());
@@ -337,7 +340,9 @@ public final class HeartSoulZeroTier {
                     if (peer != null) {
                         byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
                                 packet.getOffset() + packet.getLength());
-                        zt.send(new DatagramPacket(data, data.length, peer));
+                        synchronized (ZT) {
+                            zt.send(new DatagramPacket(data, data.length, peer));
+                        }
                     }
                 } catch (SocketTimeoutException ignored) {
                     // No game datagram this interval.
@@ -348,7 +353,7 @@ public final class HeartSoulZeroTier {
         } finally {
             if (local != null) local.close();
             if (zt != null) {
-                try { zt.close(); } catch (Exception ignored) {}
+                try { synchronized (ZT) { zt.close(); } } catch (Exception ignored) {}
             }
         }
     }
@@ -447,9 +452,11 @@ public final class HeartSoulZeroTier {
         try {
             InetAddress remote = InetAddress.getByName(remoteAddress);
             // Keep both UDP source and destination on the network's allowed game port.
-            zt = new ZeroTierDatagramSocket(remotePort);
-            zt.connect(remote, remotePort);
-            zt.setSoTimeout(100);
+            synchronized (ZT) {
+                zt = new ZeroTierDatagramSocket(remotePort);
+                zt.connect(remote, remotePort);
+                zt.setSoTimeout(1);
+            }
             byte[] buffer = new byte[2048];
             while (live.current() && !local.isClosed()) {
                 try {
@@ -458,13 +465,15 @@ public final class HeartSoulZeroTier {
                     localPeer = packet.getSocketAddress();
                     byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
                             packet.getOffset() + packet.getLength());
-                    zt.send(new DatagramPacket(data, data.length, remote, remotePort));
+                    synchronized (ZT) {
+                        zt.send(new DatagramPacket(data, data.length, remote, remotePort));
+                    }
                 } catch (SocketTimeoutException ignored) {
                     // Check the generation and service the ZeroTier side.
                 }
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    zt.receive(packet);
+                    synchronized (ZT) { zt.receive(packet); }
                     if (localPeer != null) {
                         byte[] data = Arrays.copyOfRange(packet.getData(), packet.getOffset(),
                                 packet.getOffset() + packet.getLength());
