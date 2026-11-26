@@ -1207,7 +1207,7 @@ State at end of session: repo created, nothing built yet, no code changed.
 
 ## 2026-11-26: Per-turn authoritative battle-state snapshots
 
-- Increased the reliable payload budget to 2,048 bytes.
+- Increased the reliable payload budget to 4,096 bytes.
 - The host now sends a canonical battle snapshot at every turn boundary,
   rather than only the initial setup. It includes both player parties, enemy
   party, all active battlers, side state/timers, protect/special status,
