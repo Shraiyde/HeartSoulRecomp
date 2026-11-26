@@ -754,7 +754,7 @@ static void HandleInbound(void)
         {
             u16 epoch = ReadBe16(payload);
             u16 turn = ReadBe16(payload + 2);
-            if (sInBattle && epoch == sBattleEpoch && turn == sBattleTurn)
+            if (sInBattle && epoch == sBattleEpoch && (turn == sBattleTurn || turn == (u16)(sBattleTurn + 1)))
             {
                 memcpy(sRemoteBattleFinal, payload, len);
                 sRemoteBattleFinalLen = (u16)len;
