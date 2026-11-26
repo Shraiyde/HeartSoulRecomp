@@ -13,6 +13,41 @@ Rules for this log:
 
 ---
 
+## 2026-11-26, native transport audit
+
+Updated `docs/PKMULTIPLAYER_HNS_PORT.md` in commit
+`65d90972ee7d3cafea732c4290011e10c03451aa` with the audited message map
+and transport gaps. Read the document before changing the wire protocol.
+
+### Verified on `port`
+
+- `include/platform/coop_net.h` declares messages 16, 17, 23, 24-31.
+  Active `src/coop.c` handling covers POSITION, WORLD_FLAG, WORLD_VAR,
+  WORLD_READY, WORLD_CONFIG, WORLD_CONFIG_BLOB, WORLD_RESYNC and
+  POSITION_RESYNC. SIO_MULTI, WORLD_CONFIG_ACK and SIO_RESYNC have no
+  active general receive path in the inspected code; config ACK is sent by
+  the guest but not consumed by the host in the inspected switch.
+- `coop_net.c` frames contain a 32-bit sequence, but the game-message
+  receive path does not use it for ACK, replay, or duplicate suppression.
+  AES-GCM nonce counters reject replay only within the active connection.
+- Outbound queue capacity is 48. Inbound overflow drops the oldest message.
+  A failed outbound send can also lose a message if requeueing finds the
+  outbound queue full.
+- Position and gameplay traffic share one TCP stream. Position is emitted
+  first per flush, but there is no independent fast channel.
+- The current shared-world rescan and settings blob are not a durable,
+  idempotent event journal.
+
+### Next
+
+1. Implement reliable session sequencing, ACKs, replay and resume in the
+   existing transport without adding ENet or replacing ZeroTier.
+2. Make queue overflow explicit and prevent loss of critical world/battle
+   messages. Keep position snapshots latest-only.
+3. Add protocol/feature negotiation and stable save/session identities.
+4. Add host/guest transport tests before touching battle behaviour.
+5. Run two-device tests before publishing any APK.
+
 ## 2026-11-26, PkMultiplayer compatibility audit
 
 State: created branch `coop/pkmultiplayer-hns-adapter` from `port`.
