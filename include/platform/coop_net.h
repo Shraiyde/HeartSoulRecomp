@@ -15,6 +15,7 @@
 #define COOP_MSG_WORLD_CONFIG_BLOB 29
 #define COOP_MSG_WORLD_RESYNC      30
 #define COOP_MSG_POSITION_RESYNC   31
+#define COOP_MSG_WORLD_PARTY_BLOB  32
 
 #define COOP_READY_STORY           1u
 #define COOP_READY_BATTLE_ABORT    2u
@@ -55,7 +56,7 @@ void CoopNet_SetPosition(const uint32_t words[COOP_POSITION_WORDS]);
  * outbound queue is full; the caller keeps the word and tries again. */
 bool CoopNet_SendWord(uint16_t type, uint32_t word);
 
-/* Queue an already-packed payload (config blob). */
+/* Queue an already-packed payload (config or three-Pokemon party blob). */
 bool CoopNet_SendBytes(uint16_t type, const uint8_t *bytes, uint32_t len);
 
 /* Pop one inbound non-position message. Payload is host-order for a single
