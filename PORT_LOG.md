@@ -1119,3 +1119,27 @@ State at end of session: repo created, nothing built yet, no code changed.
   lockstep battle RNG/state reconciliation, chat/emotes, ready/invite flows,
   joint wild catches, feature negotiation, and event-specific idempotency
   still need to be ported and tested.
+
+
+## 2026-11-26: Native battle and party synchronization pass
+
+- Phone protocol advanced to v4 with authenticated per-process session IDs and
+  receive watermarks. A reconnect resumes only when both peers recognize the
+  same process sessions; a restarted peer starts a clean transport session.
+- Added a session-reset notification. A peer restart clears stale story/party
+  readiness and aborts a battle already in progress instead of resuming it
+  against a process that lost its battle state.
+- Raised the phone payload ceiling to 512 bytes and added a complete three-mon
+  partner-party snapshot. Shared trainer battles now inject the partner's
+  full three-Pokemon team, not a generated copy of only the lead.
+- Added battle epoch/turn-tagged action messages. The local-left player's
+  selected move, switch or item is sent to the other phone and injected into
+  its remote-right battler. Ally move targets are mirrored between the two
+  local-left/remote-right views.
+- Added host-authoritative turn-start synchronization for both SFC32 RNG
+  streams. The guest pauses the battle tick until the host's seed for that
+  turn arrives; turn-tagged packets one step ahead are buffered.
+- These changes are source-level implementation only. They have not yet
+  passed an Android NDK/Gradle build or a two-device battle test. Battle
+  checksums/resync, complete game-event idempotency, and a separate fast
+  movement channel remain outstanding.
