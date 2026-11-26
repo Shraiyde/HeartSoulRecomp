@@ -20,6 +20,10 @@
 #define COOP_TYPE_PING 3
 #define COOP_TYPE_PONG 4
 #define COOP_TYPE_POSITION 5
+#define COOP_TYPE_RELIABLE 6
+#define COOP_TYPE_ACK 7
+#define COOP_RELIABLE_QUEUE_CAPACITY 32
+#define COOP_RETRANSMIT_MS 250
 #define COOP_HELLO_INTERVAL_MS 500
 #define COOP_PING_INTERVAL_MS 1000
 #define COOP_TIMEOUT_MS 6000
@@ -32,6 +36,45 @@ static u32 sSequence;
 static u32 sLastReceive;
 static u32 sLastSend;
 static struct CoopNetPosition sRemotePosition;
+
+struct CoopReliableOut
+{
+    u32 sequence;
+    u8 messageType;
+    u16 payloadSize;
+    u8 payload[COOP_NET_MESSAGE_MAX];
+    u32 lastSent;
+};
+
+struct CoopReliableIn
+{
+    u8 messageType;
+    u16 payloadSize;
+    u8 payload[COOP_NET_MESSAGE_MAX];
+};
+
+static struct CoopReliableOut sOutbox[COOP_RELIABLE_QUEUE_CAPACITY];
+static struct CoopReliableIn sInbox[COOP_RELIABLE_QUEUE_CAPACITY];
+static u8 sOutboxCount;
+static u8 sInboxHead;
+static u8 sInboxCount;
+static u32 sReliableSendSequence;
+static u32 sReliableReceiveSequence;
+
+static void AcknowledgeReliable(u32 acknowledgement)
+{
+    u8 removed = 0;
+    while (removed < sOutboxCount
+        && (s32)(acknowledgement - sOutbox[removed].sequence) >= 0)
+        removed++;
+    if (removed != 0)
+    {
+        u8 i;
+        for (i = removed; i < sOutboxCount; i++)
+            sOutbox[i - removed] = sOutbox[i];
+        sOutboxCount -= removed;
+    }
+}
 
 static u32 NowMs(void)
 {
@@ -79,7 +122,7 @@ static bool8 SendPacket(u8 type, const u8 *payload, u16 payloadSize)
     packet[5] = type;
     WriteU16(packet + 6, payloadSize);
     WriteU32(packet + 8, sequence);
-    WriteU32(packet + 12, 0); /* reserved for reliable-channel acknowledgement */
+    WriteU32(packet + 12, sReliableReceiveSequence);
     if (payloadSize != 0)
         memcpy(packet + COOP_HEADER_SIZE, payload, payloadSize);
 
@@ -167,6 +210,13 @@ void CoopNet_Stop(void)
     sState = COOP_NET_DISCONNECTED;
     sHavePeer = FALSE;
     sSequence = 0;
+    sReliableSendSequence = 0;
+    sReliableReceiveSequence = 0;
+    sOutboxCount = 0;
+    sInboxHead = 0;
+    sInboxCount = 0;
+    memset(sOutbox, 0, sizeof(sOutbox));
+    memset(sInbox, 0, sizeof(sInbox));
     memset(&sPeer, 0, sizeof(sPeer));
     memset(&sRemotePosition, 0, sizeof(sRemotePosition));
 }
@@ -201,6 +251,89 @@ bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing)
     payload[6] = facing;
     payload[7] = 0;
     return SendPacket(COOP_TYPE_POSITION, payload, sizeof(payload));
+}
+
+static bool8 SendReliableFrame(const struct CoopReliableOut *message)
+{
+    u8 payload[COOP_NET_MESSAGE_MAX + 1];
+    u8 packet[COOP_PACKET_MAX];
+    ssize_t sent;
+    u16 payloadSize = message->payloadSize + 1;
+
+    if (sSocket < 0 || !sHavePeer || payloadSize > COOP_PACKET_MAX - COOP_HEADER_SIZE)
+        return FALSE;
+
+    payload[0] = message->messageType;
+    if (message->payloadSize != 0)
+        memcpy(payload + 1, message->payload, message->payloadSize);
+
+    WriteU32(packet, COOP_MAGIC);
+    packet[4] = COOP_PROTOCOL;
+    packet[5] = COOP_TYPE_RELIABLE;
+    WriteU16(packet + 6, payloadSize);
+    WriteU32(packet + 8, message->sequence);
+    WriteU32(packet + 12, sReliableReceiveSequence);
+    memcpy(packet + COOP_HEADER_SIZE, payload, payloadSize);
+
+    sent = sendto(sSocket, packet, COOP_HEADER_SIZE + payloadSize, 0,
+                  (const struct sockaddr *)&sPeer, sizeof(sPeer));
+    return sent == COOP_HEADER_SIZE + payloadSize;
+}
+
+bool8 CoopNet_SendReliable(u8 messageType, const void *payload, u16 payloadSize)
+{
+    struct CoopReliableOut *message;
+
+    if (sState != COOP_NET_CONNECTED || payloadSize > COOP_NET_MESSAGE_MAX
+        || (payloadSize != 0 && payload == NULL)
+        || sOutboxCount >= COOP_RELIABLE_QUEUE_CAPACITY)
+        return FALSE;
+
+    message = &sOutbox[sOutboxCount++];
+    memset(message, 0, sizeof(*message));
+    message->sequence = ++sReliableSendSequence;
+    message->messageType = messageType;
+    message->payloadSize = payloadSize;
+    if (payloadSize != 0)
+        memcpy(message->payload, payload, payloadSize);
+
+    if (SendReliableFrame(message))
+        message->lastSent = NowMs();
+    return TRUE;
+}
+
+bool8 CoopNet_PopMessage(u8 *messageType, void *payload, u16 *payloadSize)
+{
+    struct CoopReliableIn *message;
+    if (sInboxCount == 0 || !messageType || !payloadSize)
+        return FALSE;
+
+    message = &sInbox[sInboxHead];
+    if (*payloadSize < message->payloadSize || (message->payloadSize != 0 && !payload))
+        return FALSE;
+
+    *messageType = message->messageType;
+    *payloadSize = message->payloadSize;
+    if (message->payloadSize != 0)
+        memcpy(payload, message->payload, message->payloadSize);
+
+    sInboxHead = (sInboxHead + 1) % COOP_RELIABLE_QUEUE_CAPACITY;
+    sInboxCount--;
+    return TRUE;
+}
+
+static void FlushReliableOutbox(void)
+{
+    u8 i;
+    u32 now = NowMs();
+    for (i = 0; i < sOutboxCount; i++)
+    {
+        if (sOutbox[i].lastSent == 0 || now - sOutbox[i].lastSent >= COOP_RETRANSMIT_MS)
+        {
+            if (SendReliableFrame(&sOutbox[i]))
+                sOutbox[i].lastSent = now;
+        }
+    }
 }
 
 static bool8 SamePeer(const struct sockaddr_in *from)
@@ -238,7 +371,32 @@ static void HandlePacket(const u8 *packet, size_t size, const struct sockaddr_in
         return;
 
     sLastReceive = now;
-    if (type == COOP_TYPE_HELLO && sState == COOP_NET_CONNECTED)
+    AcknowledgeReliable(ReadU32(packet + 12));
+    if (type == COOP_TYPE_RELIABLE && payloadSize >= 1)
+    {
+        u32 sequence = ReadU32(packet + 8);
+        if (sequence == sReliableReceiveSequence + 1
+            && sInboxCount < COOP_RELIABLE_QUEUE_CAPACITY
+            && payloadSize - 1 <= COOP_NET_MESSAGE_MAX)
+        {
+            u8 tail = (sInboxHead + sInboxCount) % COOP_RELIABLE_QUEUE_CAPACITY;
+            struct CoopReliableIn *message = &sInbox[tail];
+            message->messageType = packet[COOP_HEADER_SIZE];
+            message->payloadSize = payloadSize - 1;
+            if (message->payloadSize != 0)
+                memcpy(message->payload, packet + COOP_HEADER_SIZE + 1, message->payloadSize);
+            sReliableReceiveSequence = sequence;
+            sInboxCount++;
+        }
+        /* ACK duplicates and the last contiguous message. A gap is not
+         * acknowledged; the sender will retransmit the missing sequence. */
+        SendPacket(COOP_TYPE_ACK, NULL, 0);
+    }
+    else if (type == COOP_TYPE_ACK)
+    {
+        /* The cumulative acknowledgement was applied above. */
+    }
+    else if (type == COOP_TYPE_HELLO && sState == COOP_NET_CONNECTED)
     {
         SendPacket(COOP_TYPE_WELCOME, NULL, 0);
     }
@@ -289,6 +447,9 @@ void CoopNet_Poll(void)
     }
 
     now = NowMs();
+    if (sState == COOP_NET_CONNECTED)
+        FlushReliableOutbox();
+
     if (sState == COOP_NET_CONNECTING && (now - sLastSend >= COOP_HELLO_INTERVAL_MS))
         SendPacket(COOP_TYPE_HELLO, NULL, 0);
     else if (sState == COOP_NET_CONNECTED)
@@ -315,5 +476,9 @@ bool8 CoopNet_IsConnected(void) { return FALSE; }
 bool8 CoopNet_SendPosition(u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 facing)
 { (void)mapGroup; (void)mapNum; (void)x; (void)y; (void)facing; return FALSE; }
 bool8 CoopNet_GetRemotePosition(struct CoopNetPosition *position) { (void)position; return FALSE; }
+bool8 CoopNet_SendReliable(u8 messageType, const void *payload, u16 payloadSize)
+{ (void)messageType; (void)payload; (void)payloadSize; return FALSE; }
+bool8 CoopNet_PopMessage(u8 *messageType, void *payload, u16 *payloadSize)
+{ (void)messageType; (void)payload; (void)payloadSize; return FALSE; }
 
 #endif
