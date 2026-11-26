@@ -115,6 +115,8 @@ static EWRAM_DATA bool8 sBattleFinalAckSent;
 static EWRAM_DATA bool8 sBattleFinalCommitReady;
 static EWRAM_DATA u32 sBattleFinalChecksum;
 static EWRAM_DATA u16 sBattleFinalWaitFrames;
+
+static u8 CanonicalPartyLocalIndex(u8 index);
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
