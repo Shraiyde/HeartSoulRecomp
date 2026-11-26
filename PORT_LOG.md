@@ -1203,3 +1203,22 @@ State at end of session: repo created, nothing built yet, no code changed.
 - UDP forwarding through the Android ZeroTier bridge is not yet verified.
   The fallback keeps the existing connection usable if the bridge does not
   carry UDP. No Android compile or two-device test has been completed.
+
+
+## 2026-11-26: Per-turn authoritative battle-state snapshots
+
+- Increased the reliable payload budget to 2,048 bytes.
+- The host now sends a canonical battle snapshot at every turn boundary,
+  rather than only the initial setup. It includes both player parties, enemy
+  party, all active battlers, side state/timers, protect/special status,
+  event and battler state, delayed effects, party/battler indexes, action
+  bookkeeping and battle metadata.
+- The guest remaps host/guest battlers and party slots to its local layout
+  before applying the snapshot. The turn seed/checksum is then validated
+  against the repaired state before the guest continues.
+- The snapshot is bounded by a compile-time size assertion and runtime
+  payload checks. This is turn-boundary repair; it does not roll back a move
+  already executing.
+- Android compile and device testing remain unverified; the next required
+  validation is a real two-phone battle covering switches, items, status
+  effects, delayed attacks and reconnect during a turn.
