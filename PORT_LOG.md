@@ -13,6 +13,50 @@ Rules for this log:
 
 ---
 
+## 2026-11-26, phone protocol v2 identity handshake
+
+State: native handshake change committed on
+`coop/pkmultiplayer-hns-adapter`. Commits:
+- `820bddd10c24cff1d32426b6e9295045c74841ed`: protocol version and
+  authenticated peer identity pinning.
+- `cfd7945ca52b917cd4a9f12049603b6d3fb7af20`: simplified version parsing.
+- `32c9485b893ce0fd039b2389dc29b41ffb38689c`: added this branch to the
+  Android co-op compile workflow's push filter.
+- `3eef91dad27b0b0cdbdd1efcb0b31121ffd6f24b`: documented the new handshake.
+
+### Changed
+
+- Phone host now requires `HELLO 2 <client-id> <HMAC-proof>`.
+- Phone host replies with `READY 2 <host-id> <HMAC-proof>`.
+- Both sides authenticate the other peer's persistent client id using the
+  existing HMAC challenge. Host and guest pin that peer id for the lifetime
+  of the process, so a different save cannot silently take over the same
+  running co-op session after a disconnect.
+- The PC World Host path retains its legacy `HELLO <id> <proof>` handshake
+  and `READY <role>` response.
+- The new branch is included in the Co-op APK workflow push filter so a
+  subsequent branch push should run the native Android compile.
+
+### Not verified
+
+- No NDK/Gradle build result is available yet for this branch.
+- No two-device host/join, reconnect, or PC-host regression test has run.
+- This is not yet the PkMultiplayer session replay implementation. Sequence
+  ACKs, a durable outbox, resume handshake, and duplicate suppression remain.
+
+### Next
+
+1. Check the Android co-op workflow result for this branch and fix any
+   compile errors.
+2. Add automated host/guest tests for protocol v2, invalid HMAC, wrong
+   protocol version, and changed peer identity.
+3. Port the PkMultiplayer sequence/ACK/outbox/resume semantics above the
+   existing TCP transport; preserve the PC-host protocol.
+4. Test on two Android devices before adding chat, emotes, joint catches or
+   publishing an APK.
+
+---
+
 ## 2026-11-26, native transport audit
 
 Updated `docs/PKMULTIPLAYER_HNS_PORT.md` in commit
