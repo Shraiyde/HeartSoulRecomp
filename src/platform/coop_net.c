@@ -1323,7 +1323,7 @@ static void RunSession(int fd, int localRole, bool isHost)
     while (sWant)
     {
         uint64_t now;
-        if (!RecvSome(fd, acc, sizeof(acc), &have, 200))
+        if (!RecvSome(fd, acc, sizeof(acc), &have, 50))
             break;
         while (have >= 4)
         {
