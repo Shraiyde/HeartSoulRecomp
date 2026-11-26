@@ -594,7 +594,7 @@ static void HandleUdpDatagram(int fd, int localRole, int remoteRole, bool isHost
     type = (uint16_t)(((uint16_t)plain[6] << 8) | plain[7]);
     payLen = LoadBe32(plain + 8);
     seq = LoadBe32(plain + 12);
-    if (payLen != plainLen - 16)
+    if (payLen != plainLen - 16 || payLen > COOP_PAY_MAX)
         return;
     payload = plain + 16;
 
