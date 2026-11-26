@@ -1115,7 +1115,15 @@ static void RunSession(int fd, int localRole, bool isHost)
     uint64_t lastPos = 0;
     uint64_t lastAck = 0;
     uint64_t lastReplay = 0;
+    uint64_t lastUdpHello = 0;
+    uint64_t lastUdpPosition = 0;
+    uint64_t lastUdpRx = 0;
+    int udpFd = -1;
+    bool udpReady = false;
+    bool haveUdpPeer = false;
+    struct sockaddr_in udpPeer;
 
+    memset(&udpPeer, 0, sizeof(udpPeer));
     ExpirePeerPinIfNeeded();
     if (isHost)
     {
@@ -1282,6 +1290,17 @@ static void RunSession(int fd, int localRole, bool isHost)
     sSendCounter = RandomCounter();
     sRecvCounter = 0;
     pthread_mutex_unlock(&sMu);
+    if (!sPcSession)
+    {
+        pthread_mutex_lock(&sMu);
+        sUdpSendCounter = RandomCounter();
+        sUdpRecvCounter = 0;
+        pthread_mutex_unlock(&sMu);
+        udpFd = CreateUdpSocket(fd, isHost, &udpPeer);
+        if (udpFd >= 0 && !isHost)
+            haveUdpPeer = true;
+        lastUdpRx = CoopNowMs();
+    }
     fprintf(stderr, "co-op: direct phone link up (role %d)\n", localRole);
 
     /* Replay unacknowledged events after reconnect; the receiver suppresses duplicates. */
@@ -1321,6 +1340,28 @@ static void RunSession(int fd, int localRole, bool isHost)
             have -= 4 + len;
         }
         now = CoopNowMs();
+        PollUdp(udpFd, localRole, remoteRole, isHost, &udpReady,
+                &haveUdpPeer, &udpPeer, &lastUdpRx);
+        if (!sPcSession && udpFd >= 0 && !isHost && !udpReady
+            && (lastUdpHello == 0 || now - lastUdpHello >= 1000))
+        {
+            SendUdpHello(udpFd, localRole, &udpPeer);
+            lastUdpHello = now;
+        }
+        if (!sPcSession && udpReady && haveUdpPeer
+            && (lastUdpPosition == 0 || now - lastUdpPosition >= 100))
+        {
+            SendUdpPosition(udpFd, localRole, &udpPeer);
+            lastUdpPosition = now;
+        }
+        if (!sPcSession && udpReady && now - lastUdpRx > 3000)
+        {
+            udpReady = false;
+            if (isHost)
+                haveUdpPeer = false;
+            lastUdpHello = 0;
+            lastUdpRx = now;
+        }
         if (!sPcSession && now - lastReplay >= 1000)
         {
             int i;
@@ -1380,7 +1421,7 @@ static void RunSession(int fd, int localRole, bool isHost)
         }
         if (lastPos == 0 || now - lastPos >= 400)
         {
-            FlushOutbound(fd, localRole, &seq);
+            FlushOutbound(fd, localRole, &seq, sPcSession || !udpReady);
             lastPos = now;
         }
         else
@@ -1435,6 +1476,8 @@ down:
     NoteLink(false);
     if (!sPcSession && sHavePeerClientId)
         sPeerPinExpiresAtMs = CoopNowMs() + 60000;
+    if (udpFd >= 0)
+        close(udpFd);
     close(fd);
     fprintf(stderr, "co-op: direct phone link down\n");
 }
