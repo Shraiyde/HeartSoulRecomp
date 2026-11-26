@@ -74,6 +74,7 @@ static EWRAM_DATA u16 sPartnerItem;
 static EWRAM_DATA u16 sPartnerMoves[4];
 static EWRAM_DATA struct Pokemon sPartnerParty[MULTI_PARTY_SIZE];
 static EWRAM_DATA bool8 sPartnerPartyValid;
+static EWRAM_DATA bool8 sNewPeerSession;
 static EWRAM_DATA u16 sPartnerHp;
 static EWRAM_DATA u16 sBattleEpoch;
 static EWRAM_DATA u16 sBattleTurn;
@@ -664,11 +665,22 @@ static void HandleInbound(void)
             sReadyBurst = 0;
             sConfigAckWait = 0;
             ResetScan();
+            sNewPeerSession = TRUE;
             if (sInBattle)
             {
                 sAbort = TRUE;
                 if (gBattleOutcome == 0)
                     gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+            }
+            else
+            {
+                sBattleEpoch = 0;
+                sBattleTurn = 0;
+                sLocalBattleActionSent = FALSE;
+                sRemoteBattleActionReady = FALSE;
+                sBattleSeedSent = FALSE;
+                sRemoteBattleSeedReady = FALSE;
+                sNewPeerSession = FALSE;
             }
         }
         else if (type == COOP_MSG_BATTLE_SEED && len == 36)
