@@ -234,3 +234,5 @@ PkMultiplayer is MIT-licensed according to its repository README. Any source
 code copied or adapted from that project must retain its required copyright
 and license notices. This document describes the compatibility boundary; it
 does not claim that the two projects already interoperate.
+
+- Remote switch selections are translated into the partner's three party slots. Battle item effects are simulated on both phones, but only the phone that owns the acting Pokémon consumes the item from its private bag.
