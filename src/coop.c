@@ -1438,11 +1438,6 @@ void Coop_RestoreSharedBattleParty(bool8 fullRestore)
     }
     CalculatePlayerPartyCount();
     sPartySaved = FALSE;
-    sInBattle = FALSE;
-    sBattleHadLink = FALSE;
-    sBattleFinalSent = FALSE;
-    sRemoteBattleFinalReady = FALSE;
-    sBattleFinalWaitFrames = 0;
 }
 
 bool8 Coop_PartnerVisible(void)
