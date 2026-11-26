@@ -143,9 +143,9 @@ Remaining gaps:
   but they do not replace per-event identity and replay protection for
   one-time rewards or battle outcomes.
 
-These are audit findings, not a claim that a two-phone failure has been
-reproduced. Fix them with host/guest protocol tests before changing battle
-semantics or adding more gameplay messages.
+The remaining transport findings and game-layer gaps need host/guest tests.
+The new ACK/replay code is a first port, not a verified replacement for every
+PkMultiplayer transport behaviour.
 
 ## Implementation order
 
@@ -181,9 +181,9 @@ is intentionally unchanged.
 The phone transport now negotiates protocol version 3, pins the authenticated
 peer identity, retains sequenced gameplay messages until ACK, suppresses
 replayed duplicates, and replays unacknowledged messages after reconnect. It
-has not been compiled or tested on two Android devices. Phone builds using the older direct-phone handshake are
-not wire-compatible with protocol version 2; both phones must use a build
-containing this change.
+has not been compiled or tested on two Android devices. Phone builds using
+protocol version 2 or earlier are not wire-compatible; both phones must use
+a build containing this change.
 
 ## Reference source
 
