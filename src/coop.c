@@ -1286,8 +1286,6 @@ bool8 Coop_BlockTrainerApproach(void)
 
 u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
 {
-    int role;
-
     if (!sSessionLive || !CoopNet_IsUp())
         return localDistance;
     if (!Coop_IsStorySyncReady())
@@ -1296,14 +1294,11 @@ u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
         return 0;
     if (!Coop_PartnersNearby())
         return localDistance;
-    role = CoopNet_Role();
-    if (localDistance != 0 && partnerDistance != 0)
-        return role == 1 ? 0 : localDistance;
+    /* Both phones run the same trainer approach. If either player is in
+     * range, the remote tile supplies the same trigger on the other phone. */
     if (localDistance != 0)
         return localDistance;
-    if (partnerDistance != 0 && role == 0)
-        return partnerDistance;
-    return 0;
+    return partnerDistance;
 }
 
 bool8 Coop_CopyPartnerTile(s16 *x, s16 *y)
