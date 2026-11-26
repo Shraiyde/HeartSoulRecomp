@@ -121,7 +121,9 @@ final class CoopLobby {
                 String address = entry.optString("address", "").trim();
                 if (!address.matches("[0-9A-Fa-f:]+") || !address.contains(":")) continue;
                 int port = entry.optInt("port", CoopNetwork.PORT);
-                if (port < 1 || port > 65535) continue;
+                // This build's native transport is bound to one fixed port.
+                // Do not display directory entries that joinOpen cannot reach.
+                if (port != CoopNetwork.PORT) continue;
                 result.add(new Lobby(address,
                         clean(entry.optString("name", "HEART & SOUL"), "HEART & SOUL"),
                         clean(entry.optString("host", "PLAYER"), "PLAYER"),
