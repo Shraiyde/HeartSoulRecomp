@@ -10,9 +10,10 @@
   peer.
 - The relay now holds the first candidate endpoint while the native protocol
   validates its hello. Other endpoints are ignored until that candidate is
-  authenticated or expires after 4.5 seconds of inactivity.
-- The authenticated peer remains pinned as before and is released after the
-  same idle timeout, allowing a later guest to join.
+  authenticated or its fixed 4.5-second authentication window expires. A failed endpoint is
+  quarantined for 30 seconds before it can try again.
+- The authenticated peer remains pinned and is released after 4.5 seconds
+  without an authenticated packet, allowing a later guest to join.
 
 ### Verification
 
