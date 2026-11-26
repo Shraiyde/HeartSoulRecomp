@@ -373,12 +373,17 @@ static int CreateUdpSocket(int tcpFd, bool isHost, struct sockaddr_in *peer)
     }
     else
     {
-        addrLen = sizeof(*peer);
-        if (getpeername(tcpFd, (struct sockaddr *)peer, &addrLen) < 0)
+        const char *udpPortText = getenv("HNS_COOP_UDP_PORT");
+        int udpPort = udpPortText != NULL ? atoi(udpPortText) : 0;
+        if (udpPort < 1 || udpPort > 65535)
         {
             close(fd);
             return -1;
         }
+        memset(peer, 0, sizeof(*peer));
+        peer->sin_family = AF_INET;
+        peer->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        peer->sin_port = htons((uint16_t)udpPort);
         local.sin_addr.s_addr = htonl(INADDR_ANY);
         local.sin_port = 0;
         if (bind(fd, (struct sockaddr *)&local, sizeof(local)) < 0)
