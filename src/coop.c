@@ -2207,7 +2207,7 @@ static bool8 SnapshotAppendFutureSight(u8 *buffer, u32 *offset)
         {
             if (state.battlerIndex < MAX_BATTLERS_COUNT)
                 state.battlerIndex = CanonicalBattlerLocalIndex(state.battlerIndex);
-            if (state.partyIndex < PARTY_SIZE)
+            if (i < 2 && state.partyIndex < PARTY_SIZE)
                 state.partyIndex = CanonicalPartyLocalIndex(state.partyIndex);
         }
         if (!SnapshotAppend(buffer, offset, &state, sizeof(state)))
