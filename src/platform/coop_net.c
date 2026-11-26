@@ -853,7 +853,7 @@ static void RunSession(int fd, int localRole, bool isHost)
             pthread_mutex_lock(&sMu);
             for (i = 0; i < sPendingCount; i++)
             {
-                int at = (sPendingRead + i) % COOP_QUEUE;
+                int at = (sPendingRead + i) % COOP_RELIABLE_OUTBOX;
                 struct CoopQueued item = sPending[at];
                 pthread_mutex_unlock(&sMu);
                 if (!BuildAndSend(fd, localRole, item.type, item.bytes, item.len, item.seq))
@@ -951,7 +951,7 @@ static void RunSession(int fd, int localRole, bool isHost)
                 }
                 pthread_mutex_lock(&sMu);
                 sPending[sPendingWrite] = item;
-                sPendingWrite = (sPendingWrite + 1) % COOP_QUEUE;
+                sPendingWrite = (sPendingWrite + 1) % COOP_RELIABLE_OUTBOX;
                 sPendingCount++;
                 pthread_mutex_unlock(&sMu);
             }
