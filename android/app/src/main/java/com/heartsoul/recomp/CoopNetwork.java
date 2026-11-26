@@ -47,6 +47,10 @@ final class CoopNetwork {
         return HeartSoulZeroTier.connectOpen(remoteAddress, PORT);
     }
 
+    static int joinUdpPort() {
+        return HeartSoulZeroTier.joinUdpPort();
+    }
+
     static void close() {
         HeartSoulZeroTier.hostClose();
         HeartSoulZeroTier.connectClose();
