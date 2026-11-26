@@ -2345,7 +2345,7 @@ static bool8 ApplyBattleSnapshot(const u8 *buffer, u32 length)
         || buffer[4] != MAX_BATTLERS_COUNT)
         return FALSE;
     flags = ((u32)buffer[6] << 24) | ((u32)buffer[7] << 16) | ((u32)buffer[8] << 8) | buffer[9];
-    if (!(flags & BATTLE_TYPE_DOUBLE))
+    if (!(flags & BATTLE_TYPE_DOUBLE) || !(flags & BATTLE_TYPE_COOP))
         return FALSE;
     gBattlersCount = buffer[4];
     gBattleTypeFlags = flags;
@@ -2416,7 +2416,7 @@ bool8 Coop_BattleSyncTurnStart(void)
         return FALSE;
     if (CoopNet_Role() == 0)
     {
-        if (gBattlersCount != MAX_BATTLERS_COUNT || !(gBattleTypeFlags & BATTLE_TYPE_DOUBLE))
+        if (gBattlersCount != MAX_BATTLERS_COUNT || !(gBattleTypeFlags & BATTLE_TYPE_DOUBLE) || !(gBattleTypeFlags & BATTLE_TYPE_COOP))
         {
             sAbort = TRUE;
             if (gBattleOutcome == 0)
