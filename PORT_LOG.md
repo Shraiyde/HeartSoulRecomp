@@ -1222,3 +1222,16 @@ State at end of session: repo created, nothing built yet, no code changed.
 - Android compile and device testing remain unverified; the next required
   validation is a real two-phone battle covering switches, items, status
   effects, delayed attacks and reconnect during a turn.
+
+
+## 2026-11-26: Final battle-state barrier
+
+- Added a host-authored final battle snapshot with a checksum. It carries the
+  same canonical party, battler, side-effect and action state as the per-turn
+  snapshots, including the final battle outcome.
+- The guest now waits at the end-of-battle transition until that final state
+  arrives and applies cleanly. This closes the gap where the last turn could
+  diverge without another turn-start snapshot to repair it.
+- The final wait is bounded at 60 seconds; failure enters the existing safe
+  battle-abort/party-restore path rather than hanging indefinitely.
+- Still requires Android build and two-device validation.
