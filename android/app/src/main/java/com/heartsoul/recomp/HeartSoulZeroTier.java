@@ -323,7 +323,7 @@ public final class HeartSoulZeroTier {
         if (!awaitReady(live)) return;
         try {
             synchronized (ZT) {
-                zt = new ZeroTierDatagramSocket(ztPort);
+                zt = new ZeroTierDatagramSocket("::", ztPort);
                 // Keep the shared libzt lock out of long blocking receives.
                 zt.setSoTimeout(1);
             }
@@ -466,7 +466,7 @@ public final class HeartSoulZeroTier {
             InetAddress remote = InetAddress.getByName(remoteAddress);
             // Keep both UDP source and destination on the network's allowed game port.
             synchronized (ZT) {
-                zt = new ZeroTierDatagramSocket(remotePort);
+                zt = new ZeroTierDatagramSocket("::", remotePort);
                 zt.connect(remote, remotePort);
                 zt.setSoTimeout(1);
             }
