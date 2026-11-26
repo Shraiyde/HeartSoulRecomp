@@ -767,6 +767,9 @@ static void RunSession(int fd, int localRole, bool isHost)
     char proof[80];
     char hello[128];
     char peerId[20];
+    char peerSessionId[20];
+    char peerExpectedSession[20];
+    uint32_t peerReceivedSeq = 0;
     uint8_t acc[COOP_MAX_FRAME + 8];
     size_t have = 0;
     uint32_t seq = 1;
@@ -777,8 +780,12 @@ static void RunSession(int fd, int localRole, bool isHost)
 
     if (isHost)
     {
+        bool resume;
         if (!ReadLine(fd, line, sizeof(line))
-            || !VerifyHello(line, peerId, sizeof(peerId))
+            || !VerifyHello(line, peerId, sizeof(peerId),
+                            peerSessionId, sizeof(peerSessionId),
+                            peerExpectedSession, sizeof(peerExpectedSession),
+                            &peerReceivedSeq)
             || (sHavePeerClientId && strcmp(sPeerClientId, peerId) != 0))
         {
             fprintf(stderr, "co-op: rejected a different or incompatible phone peer\n");
@@ -790,13 +797,25 @@ static void RunSession(int fd, int localRole, bool isHost)
             memcpy(sPeerClientId, peerId, strlen(peerId) + 1);
             sHavePeerClientId = true;
         }
-        if (!HelloProofForId(sClientId, proof, sizeof(proof)))
+        resume = sHavePeerSessionId
+            && strcmp(sPeerSessionId, peerSessionId) == 0
+            && strcmp(peerExpectedSession, sSessionId) == 0;
+        if (resume)
+            AckPending(peerReceivedSeq);
+        else
+            ResetReliableSession();
+        memcpy(sPeerSessionId, peerSessionId, strlen(peerSessionId) + 1);
+        sHavePeerSessionId = true;
+        if (!HelloProofForSession("ready", sClientId, sSessionId,
+                                  peerSessionId, sReliableRxSeq,
+                                  proof, sizeof(proof)))
         {
             close(fd);
             return;
         }
-        snprintf(hello, sizeof(hello), "READY %d %s %s\n",
-                 COOP_PHONE_PROTOCOL, sClientId, proof);
+        snprintf(hello, sizeof(hello), "READY %d %s %s %s %u %s\n",
+                 COOP_PHONE_PROTOCOL, sClientId, sSessionId,
+                 peerSessionId, sReliableRxSeq, proof);
         memset(proof, 0, sizeof(proof));
         if (!SendAll(fd, (const uint8_t *)hello, strlen(hello)))
         {
@@ -808,16 +827,33 @@ static void RunSession(int fd, int localRole, bool isHost)
     }
     else
     {
-        if (!HelloProofForId(sClientId, proof, sizeof(proof)))
-        {
-            close(fd);
-            return;
-        }
         if (sPcSession)
+        {
+            if (!HelloProofForId(sClientId, proof, sizeof(proof)))
+            {
+                close(fd);
+                return;
+            }
             snprintf(hello, sizeof(hello), "HELLO %s %s\n", sClientId, proof);
+        }
         else
-            snprintf(hello, sizeof(hello), "HELLO %d %s %s\n",
-                     COOP_PHONE_PROTOCOL, sClientId, proof);
+        {
+            const char *expectedPeer = sHavePeerSessionId ? sPeerSessionId : "-";
+            uint32_t receivedSeq;
+            pthread_mutex_lock(&sMu);
+            receivedSeq = sReliableRxSeq;
+            pthread_mutex_unlock(&sMu);
+            if (!HelloProofForSession("hello", sClientId, sSessionId,
+                                      expectedPeer, receivedSeq,
+                                      proof, sizeof(proof)))
+            {
+                close(fd);
+                return;
+            }
+            snprintf(hello, sizeof(hello), "HELLO %d %s %s %s %u %s\n",
+                     COOP_PHONE_PROTOCOL, sClientId, sSessionId,
+                     expectedPeer, receivedSeq, proof);
+        }
         memset(proof, 0, sizeof(proof));
         if (!SendAll(fd, (const uint8_t *)hello, strlen(hello)))
         {
@@ -854,13 +890,19 @@ static void RunSession(int fd, int localRole, bool isHost)
         else
         {
             int version = 0;
-            char hostId[20];
-            char hostProof[80];
-            char expected[80];
-            if (sscanf(line, "READY %d %19s %79s", &version, hostId, hostProof) != 3
+            unsigned int hostReceivedSeq = 0;
+            char hostId[20], hostSessionId[20], hostPeerSessionId[20];
+            char hostProof[80], expected[80];
+            bool resume;
+            if (sscanf(line, "READY %d %19s %19s %19s %u %79s",
+                       &version, hostId, hostSessionId, hostPeerSessionId,
+                       &hostReceivedSeq, hostProof) != 6
                 || version != COOP_PHONE_PROTOCOL
-                || strlen(hostId) < 8
-                || !HelloProofForId(hostId, expected, sizeof(expected))
+                || strlen(hostId) < 8 || strlen(hostSessionId) < 8
+                || strcmp(hostPeerSessionId, sSessionId) != 0
+                || !HelloProofForSession("ready", hostId, hostSessionId,
+                                         hostPeerSessionId, (uint32_t)hostReceivedSeq,
+                                         expected, sizeof(expected))
                 || strcmp(hostProof, expected) != 0
                 || (sHavePeerClientId && strcmp(sPeerClientId, hostId) != 0))
             {
@@ -873,6 +915,13 @@ static void RunSession(int fd, int localRole, bool isHost)
                 memcpy(sPeerClientId, hostId, strlen(hostId) + 1);
                 sHavePeerClientId = true;
             }
+            resume = sHavePeerSessionId && strcmp(sPeerSessionId, hostSessionId) == 0;
+            if (resume)
+                AckPending((uint32_t)hostReceivedSeq);
+            else
+                ResetReliableSession();
+            memcpy(sPeerSessionId, hostSessionId, strlen(hostSessionId) + 1);
+            sHavePeerSessionId = true;
         }
     }
 
@@ -1059,6 +1108,7 @@ static void *ThreadMain(void *unused)
     signal(SIGPIPE, SIG_IGN);
     PrepareKey();
     LoadOrCreateClientId();
+    CreateSessionId();
 
     if (port < 1 || port > 65535)
     {
