@@ -1247,3 +1247,5 @@ State at end of session: repo created, nothing built yet, no code changed.
   the battle effect without consuming its local inventory.
 - The reliable staging queue now holds 2,048 messages, matching the session
   journal capacity, rather than the former 48-message staging limit.
+
+- Phone protocol bumped to v6 after adding the canonical per-turn battle snapshot and final snapshot ACK/commit barrier; v5 clients are intentionally rejected.
