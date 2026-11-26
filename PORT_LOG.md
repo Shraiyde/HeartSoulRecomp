@@ -1,5 +1,40 @@
 # Port log
 
+## 2026-11-26, bound the co-op staging queue
+
+State: transport work is present on `coop/pkmultiplayer-hns-adapter`,
+but no Android build or two-device test is verified.
+
+### Changed
+
+- `src/platform/coop_net.c` now keeps the producer-facing outbound staging
+  queue at 48 entries instead of allocating another 2,048-entry queue.
+- The 2,048-entry reliable replay outbox remains separate and retains sent
+  phone-session messages until acknowledged. The change removes roughly
+  8 MiB of static queue storage without reducing the replay outbox capacity.
+- The existing phone transport on this branch is protocol v5: authenticated
+  client/session handshake, reconnect resume, ordered reliable TCP messages,
+  ACK/replay, and latest-only UDP position snapshots. The PC World Host
+  handshake remains a separate legacy path.
+
+### Not verified
+
+- The queue-capacity change has not yet been compiled.
+- No Android device or two-phone test has run in this session.
+- The reliable outbox is in-memory; process death starts a new session and
+  must be treated as a session reset, not durable save-backed delivery.
+
+### Next
+
+1. Confirm the branch-push Android compile and fix any compiler errors.
+2. Add host/guest transport tests for ACK, duplicate/reordered frames,
+   reconnect/resume, changed peer identity, and full queues.
+3. Audit battle state transfer and game-side retry paths before a release.
+4. Test on two Android devices before publishing an APK.
+
+---
+
+
 Newest entry first. One entry per working session. Each entry says what was
 done, what was learned, and exactly where to pick up. If you are a model
 starting a session: read the top entry and `PORT_PLAN.md`, then continue from
