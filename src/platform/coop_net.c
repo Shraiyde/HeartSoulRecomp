@@ -277,6 +277,11 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
         if (payLen != 4) return;
         ack = LoadBe32(payload);
         pthread_mutex_lock(&sMu);
+        if (ack > sReliableTxSeq)
+        {
+            pthread_mutex_unlock(&sMu);
+            return;
+        }
         while (sPendingCount > 0 && sPending[sPendingRead].seq <= ack)
         {
             sPendingRead = (sPendingRead + 1) % COOP_RELIABLE_OUTBOX;
@@ -322,17 +327,17 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
         {
             if (seq == 0) return;
             pthread_mutex_lock(&sMu);
-        if (seq <= sReliableRxSeq)
-        {
-            sAckDirty = true;
-            pthread_mutex_unlock(&sMu);
-            return;
-        }
-        if (seq != sReliableRxSeq + 1)
-        {
-            pthread_mutex_unlock(&sMu);
-            return;
-        }
+            if (seq <= sReliableRxSeq)
+            {
+                sAckDirty = true;
+                pthread_mutex_unlock(&sMu);
+                return;
+            }
+            if (seq != sReliableRxSeq + 1)
+            {
+                pthread_mutex_unlock(&sMu);
+                return;
+            }
             pthread_mutex_unlock(&sMu);
         }
         memset(&item, 0, sizeof(item));
