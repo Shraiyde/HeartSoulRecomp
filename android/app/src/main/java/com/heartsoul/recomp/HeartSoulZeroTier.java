@@ -538,7 +538,7 @@ public final class HeartSoulZeroTier {
         } finally {
             local.close();
             if (zt != null) {
-                try { zt.close(); } catch (Exception ignored) {}
+                try { synchronized (ZT) { zt.close(); } } catch (Exception ignored) {}
             }
         }
     }
