@@ -1655,6 +1655,12 @@ void Coop_FinishSharedBattle(void)
     sInBattle = FALSE;
     sBattleHadLink = FALSE;
     sBattleFinalSent = FALSE;
+    sBattleFinalAcked = FALSE;
+    sBattleFinalCommitSent = FALSE;
+    sBattleFinalApplied = FALSE;
+    sBattleFinalAckSent = FALSE;
+    sBattleFinalCommitReady = FALSE;
+    sBattleFinalChecksum = 0;
     sRemoteBattleFinalReady = FALSE;
     sBattleFinalWaitFrames = 0;
 }
@@ -1673,6 +1679,12 @@ void Coop_OnBattleStarted(void)
     sAbort = FALSE;
     sAbortSent = FALSE;
     sBattleFinalSent = FALSE;
+    sBattleFinalAcked = FALSE;
+    sBattleFinalCommitSent = FALSE;
+    sBattleFinalApplied = FALSE;
+    sBattleFinalAckSent = FALSE;
+    sBattleFinalCommitReady = FALSE;
+    sBattleFinalChecksum = 0;
     sRemoteBattleFinalReady = FALSE;
     sBattleFinalWaitFrames = 0;
     /* PrepareSharedTrainerBattle already snapped the real party, then
@@ -2755,6 +2767,12 @@ void Coop_LeaveAbortedBattle(void)
     sInBattle = FALSE;
     sBattleHadLink = FALSE;
     sBattleFinalSent = FALSE;
+    sBattleFinalAcked = FALSE;
+    sBattleFinalCommitSent = FALSE;
+    sBattleFinalApplied = FALSE;
+    sBattleFinalAckSent = FALSE;
+    sBattleFinalCommitReady = FALSE;
+    sBattleFinalChecksum = 0;
     sRemoteBattleFinalReady = FALSE;
     sBattleFinalWaitFrames = 0;
     if (sNewPeerSession)
