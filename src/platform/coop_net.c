@@ -397,6 +397,8 @@ static bool DecodeEncrypted(const uint8_t *wire, size_t wireLen, int expectedSen
     }
     pthread_mutex_unlock(&sMu);
     cipherLen = wireLen - 12 - 16;
+    if (cipherLen < 16)
+        return true;
     tag = wire + 12 + cipherLen;
     if (CoopAesGcmDecrypt(sSessionKey, wire, wire + 12, cipherLen, tag, plain) != 0)
         return true;
