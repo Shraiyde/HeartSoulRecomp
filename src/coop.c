@@ -71,6 +71,8 @@ static EWRAM_DATA u16 sPartnerSpecies;
 static EWRAM_DATA u8 sPartnerLevel;
 static EWRAM_DATA u16 sPartnerItem;
 static EWRAM_DATA u16 sPartnerMoves[4];
+static EWRAM_DATA struct Pokemon sPartnerParty[MULTI_PARTY_SIZE];
+static EWRAM_DATA bool8 sPartnerPartyValid;
 static EWRAM_DATA u16 sPartnerHp;
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
@@ -585,7 +587,7 @@ static u32 ReadBe32(const u8 *p)
 static void HandleInbound(void)
 {
     u16 type;
-    u8 payload[96];
+    u8 payload[512];
     u32 len;
     u8 guard;
 
@@ -634,6 +636,11 @@ static void HandleInbound(void)
             sPartnerHp = (u16)(payload[14] | (payload[15] << 8));
             sPartnerMaxHp = (u16)(payload[16] | (payload[17] << 8));
             sPartnerLeadValid = sPartnerSpecies != SPECIES_NONE && sPartnerLevel != 0;
+        }
+        else if (type == COOP_MSG_WORLD_PARTY_BLOB && len == sizeof(sPartnerParty))
+        {
+            memcpy(sPartnerParty, payload, sizeof(sPartnerParty));
+            sPartnerPartyValid = TRUE;
         }
         else if (type == COOP_MSG_WORLD_RESYNC || type == COOP_MSG_POSITION_RESYNC)
         {
@@ -1092,6 +1099,43 @@ static void PublishLead(void)
     CoopNet_SendBytes(COOP_MSG_WORLD_CONFIG, raw, sizeof(raw));
 }
 
+/* Share the complete three-Pokemon battle roster. struct Pokemon contains
+ * only fixed-width save data (no pointers), and both phones run this same
+ * Heart & Soul build/ABI. The legacy lead summary remains for the presence
+ * and readiness checks; the blob supplies all battle stats, PP, status,
+ * held items, and switch candidates. */
+STATIC_ASSERT(sizeof(struct Pokemon) * MULTI_PARTY_SIZE <= 512, CoopPartyBlobTooLarge);
+
+static void PublishParty(void)
+{
+    u8 raw[sizeof(struct Pokemon) * MULTI_PARTY_SIZE];
+    static u8 last[sizeof(struct Pokemon) * MULTI_PARTY_SIZE];
+    static bool8 haveLast;
+    static u8 ticks;
+    u32 i;
+    bool8 changed;
+
+    memset(raw, 0, sizeof(raw));
+    for (i = 0; i < MULTI_PARTY_SIZE && i < gPlayerPartyCount; i++)
+    {
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SANITY_HAS_SPECIES, NULL))
+            memcpy(raw + i * sizeof(struct Pokemon), &gPlayerParty[i], sizeof(struct Pokemon));
+    }
+    changed = !haveLast || memcmp(last, raw, sizeof(raw)) != 0;
+    if (!changed && ++ticks < 90)
+        return;
+    if (CoopNet_SendBytes(COOP_MSG_WORLD_PARTY_BLOB, raw, sizeof(raw)))
+    {
+        memcpy(last, raw, sizeof(raw));
+        haveLast = TRUE;
+        ticks = 0;
+    }
+    else
+    {
+        ticks = 89;
+    }
+}
+
 bool8 Coop_IsStorySyncReady(void)
 {
     return sSessionLive && sScanDone && sRemoteReady && sOutN == 0;
@@ -1122,7 +1166,7 @@ bool8 Coop_PartnersNearby(void)
         dx = -dx;
     if (dy < 0)
         dy = -dy;
-    return (dx + dy) <= 12 && sPartnerLeadValid;
+    return (dx + dy) <= 12 && sPartnerLeadValid && sPartnerPartyValid;
 }
 
 bool8 Coop_BlockFieldEvent(void)
@@ -1184,7 +1228,6 @@ bool8 Coop_CopyPartnerTile(s16 *x, s16 *y)
 void Coop_PrepareSharedTrainerBattle(void)
 {
     u32 i;
-    u16 move;
 
     if (!CoopNet_IsUp() || !Coop_PartnersNearby())
         return;
@@ -1192,22 +1235,15 @@ void Coop_PrepareSharedTrainerBattle(void)
         Coop_OnBattleStarted();
     if (!sInBattle)
         return;
-    ZeroMonData(&gPlayerParty[MULTI_PARTY_SIZE]);
-    ZeroMonData(&gPlayerParty[MULTI_PARTY_SIZE + 1]);
-    ZeroMonData(&gPlayerParty[MULTI_PARTY_SIZE + 2]);
-    CreateMon(&gPlayerParty[MULTI_PARTY_SIZE], sPartnerSpecies, sPartnerLevel, 0,
-              OTID_STRUCT_RANDOM_NO_SHINY);
-    for (i = 0; i < MAX_MON_MOVES; i++)
+    for (i = 0; i < MULTI_PARTY_SIZE; i++)
     {
-        move = sPartnerMoves[i];
-        SetMonData(&gPlayerParty[MULTI_PARTY_SIZE], MON_DATA_MOVE1 + i, &move);
+        struct Pokemon *dst = &gPlayerParty[MULTI_PARTY_SIZE + i];
+        if (GetMonData(&sPartnerParty[i], MON_DATA_SANITY_HAS_SPECIES, NULL))
+            *dst = sPartnerParty[i];
+        else
+            ZeroMonData(dst);
     }
-    SetMonData(&gPlayerParty[MULTI_PARTY_SIZE], MON_DATA_HELD_ITEM, &sPartnerItem);
-    CalculateMonStats(&gPlayerParty[MULTI_PARTY_SIZE]);
-    if (sPartnerMaxHp != 0)
-        SetMonData(&gPlayerParty[MULTI_PARTY_SIZE], MON_DATA_MAX_HP, &sPartnerMaxHp);
-    if (sPartnerHp != 0)
-        SetMonData(&gPlayerParty[MULTI_PARTY_SIZE], MON_DATA_HP, &sPartnerHp);
+    CalculatePlayerPartyCount();
     gBattleTypeFlags |= BATTLE_TYPE_DOUBLE | BATTLE_TYPE_MULTI | BATTLE_TYPE_INGAME_PARTNER | BATTLE_TYPE_COOP;
     sPartySaved = TRUE;
 }
@@ -1265,6 +1301,7 @@ void Coop_Frame(void)
     if (!up && sLinkWasUp)
     {
         sRemoteReady = FALSE;
+        sPartnerPartyValid = FALSE;
         sReadyBurst = 0;
     }
     sLinkWasUp = up;
@@ -1282,6 +1319,7 @@ void Coop_Frame(void)
         PublishConfig();
         PublishPosition();
         PublishLead();
+        PublishParty();
         if (background != sAnnouncedBackground)
         {
             if (CoopNet_SendWord(COOP_MSG_WORLD_READY,
