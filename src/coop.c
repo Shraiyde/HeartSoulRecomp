@@ -405,6 +405,27 @@ static bool8 IsSharedVar(u16 varId)
 
 static bool8 Enqueue(u16 type, u16 id, u16 value)
 {
+    u8 i, j;
+
+    /* These are state updates, not one-shot events. Keep only the newest
+     * pending value for a given flag/variable, moving it to the queue tail so
+     * its ordering relative to other story changes remains intact. */
+    for (i = 0; i < sOutN; i++)
+    {
+        u8 at = (sOutR + i) % COOP_QUEUE;
+        if (sOutQ[at].type == type && sOutQ[at].id == id)
+        {
+            for (j = i; j + 1 < sOutN; j++)
+            {
+                u8 dst = (sOutR + j) % COOP_QUEUE;
+                u8 src = (sOutR + j + 1) % COOP_QUEUE;
+                sOutQ[dst] = sOutQ[src];
+            }
+            sOutW = (sOutW + COOP_QUEUE - 1) % COOP_QUEUE;
+            sOutN--;
+            break;
+        }
+    }
     if (sOutN >= COOP_QUEUE)
         return FALSE;
     sOutQ[sOutW].type = type;
@@ -419,7 +440,12 @@ static void QueueFlag(u16 flagId, bool8 set)
 {
     if (sApplying || !IsSharedFlag(flagId) || !sSessionLive)
         return;
-    Enqueue(COOP_MSG_WORLD_FLAG, flagId, set ? 1 : 0);
+    if (!Enqueue(COOP_MSG_WORLD_FLAG, flagId, set ? 1 : 0))
+    {
+        sScanPhase = 0;
+        sScanCursor = HNS_HIDE_POKEMON_START;
+        sScanDone = FALSE;
+    }
 }
 
 static void QueueVar(u16 varId, u16 value)
@@ -428,7 +454,12 @@ static void QueueVar(u16 varId, u16 value)
         return;
     if (value <= VarGet(varId))
         return;
-    Enqueue(COOP_MSG_WORLD_VAR, varId, value);
+    if (!Enqueue(COOP_MSG_WORLD_VAR, varId, value))
+    {
+        sScanPhase = 0;
+        sScanCursor = HNS_HIDE_POKEMON_START;
+        sScanDone = FALSE;
+    }
 }
 
 void Coop_OnFlagChanged(u16 flagId, bool8 set)
