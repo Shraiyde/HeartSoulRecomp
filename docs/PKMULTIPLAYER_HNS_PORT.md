@@ -109,8 +109,7 @@ messages per flush. The game layer currently uses these message types:
 | 30 `WORLD_RESYNC` | Requests a shared-world rescan. |
 | 31 `POSITION_RESYNC` | Requests position resync / shared-world rescan. |
 
-The first reliability layer is now implemented on the direct-phone
-protocol (version 4):
+The current direct-phone transport is protocol version 5:
 
 - The handshake carries authenticated process-session IDs and receive
   watermarks. Both peers resume only when each recognizes the other's current
@@ -127,7 +126,8 @@ protocol (version 4):
   no longer discards an older event or ACKs the new one; the sender retains and
   retries it. The legacy Windows PC transport keeps its old framing behaviour.
 - The guest retries reconnects with backoff for up to 60 seconds. The host
-  continues listening after a disconnect and authenticates the pinned peer ID.
+  continues listening after a disconnect; the peer identity pin is released
+  after the same 60-second reconnect window.
 
 Remaining gaps:
 
@@ -158,19 +158,20 @@ Game-layer work now added on top of that transport:
 - Each game also publishes a save fingerprint derived from the trainer ID,
   player name/gender and save encryption key. The peer pins that identity;
   changing save slots resets the co-op game session and aborts an active battle.
+- Movement now has a separate AES-GCM UDP channel with session-bound endpoint
+  authentication, latest-only sequence numbers and replay/order rejection.
+  Gameplay remains on reliable ordered TCP. If the UDP path cannot be opened,
+  the transport falls back to TCP position snapshots.
 
 - The session state and outbox live in process memory; a full app/process
   restart starts a new transport session and does not restore unacknowledged
   events from disk.
-- The protocol still uses the existing TCP stream, so movement does not have
-  ENet's independent unreliable/sequenced channel and can experience
-  head-of-line blocking.
+- The Android ZeroTier bridge path has not yet been verified to forward UDP.
+  If it does not, the built-in TCP fallback preserves movement but can still
+  experience head-of-line blocking.
 - Message-specific idempotency keys for irreversible game effects (rewards,
   catches and trade commits), plus battle-state checksums/resync after a
   deterministic divergence, are still needed above transport.
-- Position and gameplay messages share one TCP stream. The position snapshot
-  is sent first on each flush, but this does not create ENet's independent
-  fast channel; large or stalled reliable traffic can still delay movement.
 - The existing story rescan and config blob are useful recovery mechanisms,
   but they do not replace per-event identity and replay protection for
   one-time rewards or battle outcomes.
@@ -198,26 +199,18 @@ PkMultiplayer transport behaviour.
    Release after the two-phone test passes; a green compile alone is not a
    multiplayer test.
 
-## First native compatibility change
+## Current phone protocol
 
-The Android phone-to-phone handshake now advertises protocol version 4.
-Both peers prove their persistent client identity with the existing HMAC
-challenge. The host pins the first authenticated guest identity for the life
-of that host process; a different client cannot take over the same live host
-session after a disconnect. The guest similarly pins the authenticated host
-identity for its process lifetime. This follows PkMultiplayer's rule that a
-reconnect must be the same peer/save identity, rather than silently attaching
-a different save to an existing shared world. The Windows PC-host handshake
-is intentionally unchanged.
-
-The phone transport now negotiates protocol version 4, authenticates device
-and process-session identities, exchanges receive watermarks during resume,
-and resets stale queues when either process has restarted. Reliable gameplay
-messages remain sequenced until ACK, duplicates are suppressed, and pending
-messages are replayed after reconnect. It has not been compiled or tested on
-two Android devices. Phone builds using
-protocol version 2 or earlier are not wire-compatible; both phones must use
-a build containing this change.
+The Android phone-to-phone handshake now advertises protocol version 5.
+Both peers authenticate persistent device identity and process-session
+identity with HMAC proofs. Receive watermarks allow same-process reconnects to
+resume and replay unacknowledged events; a restarted process begins a clean
+session. Save fingerprints are pinned at the game layer, and the device pin is
+released after the 60-second reconnect window so a new partner can join.
+The independent UDP movement channel uses AES-GCM and authenticates the
+peer's session/device IDs before accepting its endpoint. The Windows PC-host
+handshake remains on its legacy protocol. Both phones must use the same
+protocol-v5 build. No Android build or two-device test has yet been verified.
 
 ## Reference source
 
