@@ -1143,3 +1143,24 @@ State at end of session: repo created, nothing built yet, no code changed.
   passed an Android NDK/Gradle build or a two-device battle test. Battle
   checksums/resync, complete game-event idempotency, and a separate fast
   movement channel remain outstanding.
+
+
+## 2026-11-26: Authoritative battle setup and divergence guard
+
+- Expanded the phone payload cap to 1,024 bytes for battle setup snapshots.
+- Before the first shared turn, the host now sends the generated enemy party,
+  active opponent BattlePokemon records, battler count, battle flags/weather,
+  and the battler party-order/switch/action bookkeeping arrays. The guest
+  applies these in canonical host/guest order before the first turn seed.
+- Added a canonical FNV-1a battle-state checksum covering both player teams
+  in host/guest order, active battlers, opponent party, battler party indices
+  and order, selected-move/target/item state, weather, battle flags and result.
+- The guest compares the checksum at every turn start before applying the
+  host's RNG state. A mismatch triggers the existing safe battle-abort path.
+  Full mid-battle state repair is still outstanding.
+- The trainer approach now uses either player's remote/local approach tile so
+  both phones trigger the same shared trainer battle. It waits for story sync
+  and both full party snapshots when the partner is nearby, while preserving
+  solo trainer battles when the partner is elsewhere.
+- These are still uncompiled source changes. No Android build or two-device
+  co-op test has been verified.
