@@ -184,10 +184,16 @@ public final class HeartSoulZeroTier {
         while (System.currentTimeMillis() < deadline) {
             if ("error".equals(state)) return false;
             if (network) {
-                if (ZeroTierNative.zts_net_transport_is_ready(networkId) == 1
-                        && ZeroTierNative.zts_addr_is_assigned(networkId, ZeroTierNative.ZTS_AF_INET6) == 1) return true;
-            } else if (ZeroTierNative.zts_node_is_online() == 1) {
-                return true;
+                boolean networkReady;
+                synchronized (ZT) {
+                    networkReady = ZeroTierNative.zts_net_transport_is_ready(networkId) == 1
+                            && ZeroTierNative.zts_addr_is_assigned(networkId, ZeroTierNative.ZTS_AF_INET6) == 1;
+                }
+                if (networkReady) return true;
+            } else {
+                boolean online;
+                synchronized (ZT) { online = ZeroTierNative.zts_node_is_online() == 1; }
+                if (online) return true;
             }
             Thread.sleep(100);
         }
@@ -216,7 +222,11 @@ public final class HeartSoulZeroTier {
         // only means it no longer hears ZeroTier's central servers; players
         // stay linked to each other and the game carries on. Showing that as
         // "Reconnecting..." was a false alarm that never went away.
-        if (ready && note.isEmpty() && ZeroTierNative.zts_net_transport_is_ready(networkId) != 1) note = "Reconnecting...";
+        if (ready && note.isEmpty()) {
+            int transportReady;
+            synchronized (ZT) { transportReady = ZeroTierNative.zts_net_transport_is_ready(networkId); }
+            if (transportReady != 1) note = "Reconnecting...";
+        }
         return state + "\t" + address + "\t" + note;
     }
 
