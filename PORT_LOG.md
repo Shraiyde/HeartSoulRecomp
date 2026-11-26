@@ -1083,3 +1083,39 @@ State at end of session: repo created, nothing built yet, no code changed.
    as `docs/port/transplant_inventory.md`.
 4. Copy `src/platform`, `include/platform*`, `android/` onto `port` and start
    on the build system (M1).
+
+
+## 2026-11-26: PkMultiplayer native transport port
+
+### Implemented on `coop/pkmultiplayer-hns-adapter`
+
+- Direct-phone handshake advanced to protocol v3; the legacy Windows PC-host
+  handshake remains unchanged.
+- Added an application-level reliable sequence independent of the AES-GCM
+  per-connection nonce counter.
+- Added contiguous receive sequencing, duplicate suppression, highest-
+  contiguous ACKs, and rejection of ACKs beyond the last transmitted sequence.
+- Added a 2,048-message unacknowledged outbox. Messages are retained until ACK,
+  replayed after reconnect, and retried every second on a live connection.
+- Phone inbound queue overflow no longer evicts an older gameplay event or
+  ACKs a message it could not enqueue. The sender's replay recovers it once
+  the game thread drains the queue.
+- Preserved the legacy PC transport's previous message framing and queue
+  semantics by guarding the new ACK/replay path to direct-phone sessions.
+- Guest reconnect attempts now use backoff and continue for up to 60 seconds;
+  the host continues accepting the pinned peer after a disconnect.
+- Added the branch to the Android co-op compile workflow earlier in this port.
+
+### Not verified
+
+- No NDK/Gradle compile result is available from the connected GitHub status
+  endpoint for these commits.
+- No two-device Android session, forced disconnect, queue-saturation, or
+  reconnect test has been run.
+- The outbox is process-memory only; process death loses the session.
+- The transport still uses one TCP stream, not PkMultiplayer's separate
+  reliable and fast ENet channels.
+- Game-layer parity is incomplete: synchronized battle actions, deterministic
+  lockstep battle RNG/state reconciliation, chat/emotes, ready/invite flows,
+  joint wild catches, feature negotiation, and event-specific idempotency
+  still need to be ported and tested.
