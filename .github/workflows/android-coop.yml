@@ -41,6 +41,7 @@ jobs:
 
       - name: Build native game data
         run: |
+          touch .histignore
           docker build -t hns-port port/docker
           port/android-data.sh
 
