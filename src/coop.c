@@ -80,10 +80,14 @@ static EWRAM_DATA u16 sBattleTurn;
 static EWRAM_DATA bool8 sLocalBattleActionSent;
 static EWRAM_DATA bool8 sRemoteBattleActionReady;
 static EWRAM_DATA struct CoopBattleAction sRemoteBattleAction;
+static EWRAM_DATA u16 sRemoteBattleActionEpoch;
+static EWRAM_DATA u16 sRemoteBattleActionTurn;
 static EWRAM_DATA bool8 sBattleSeedSent;
 static EWRAM_DATA bool8 sRemoteBattleSeedReady;
 static EWRAM_DATA rng_value_t sRemoteBattleRng;
 static EWRAM_DATA rng_value_t sRemoteBattleRng2;
+static EWRAM_DATA u16 sRemoteBattleSeedEpoch;
+static EWRAM_DATA u16 sRemoteBattleSeedTurn;
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
@@ -656,8 +660,11 @@ static void HandleInbound(void)
         {
             u16 epoch = ReadBe16(payload);
             u16 turn = ReadBe16(payload + 2);
-            if (sInBattle && epoch == sBattleEpoch && turn == sBattleTurn)
+            if ((sInBattle && epoch == sBattleEpoch && (turn == sBattleTurn || turn == (u16)(sBattleTurn + 1)))
+                || (!sInBattle && epoch == (u16)(sBattleEpoch + 1) && turn == 0))
             {
+                sRemoteBattleSeedEpoch = epoch;
+                sRemoteBattleSeedTurn = turn;
                 sRemoteBattleRng.a = ReadBe32(payload + 4);
                 sRemoteBattleRng.b = ReadBe32(payload + 8);
                 sRemoteBattleRng.c = ReadBe32(payload + 12);
@@ -673,8 +680,11 @@ static void HandleInbound(void)
         {
             u16 epoch = ReadBe16(payload);
             u16 turn = ReadBe16(payload + 2);
-            if (sInBattle && epoch == sBattleEpoch && turn == sBattleTurn)
+            if ((sInBattle && epoch == sBattleEpoch && (turn == sBattleTurn || turn == (u16)(sBattleTurn + 1)))
+                || (!sInBattle && epoch == (u16)(sBattleEpoch + 1) && turn == 0))
             {
+                sRemoteBattleActionEpoch = epoch;
+                sRemoteBattleActionTurn = turn;
                 sRemoteBattleAction.action = payload[4];
                 sRemoteBattleAction.data1 = payload[5];
                 sRemoteBattleAction.data2 = payload[6];
@@ -1526,9 +1536,11 @@ void Coop_OnBattleStarted(void)
         sBattleEpoch = 1;
     sBattleTurn = 0;
     sLocalBattleActionSent = FALSE;
-    sRemoteBattleActionReady = FALSE;
+    if (sRemoteBattleActionEpoch != sBattleEpoch || sRemoteBattleActionTurn != 0)
+        sRemoteBattleActionReady = FALSE;
     sBattleSeedSent = FALSE;
-    sRemoteBattleSeedReady = FALSE;
+    if (sRemoteBattleSeedEpoch != sBattleEpoch || sRemoteBattleSeedTurn != 0)
+        sRemoteBattleSeedReady = FALSE;
     memset(&sRemoteBattleAction, 0, sizeof(sRemoteBattleAction));
     sPartyCountBackup = gPlayerPartyCount;
     for (i = 0; i < PARTY_SIZE; i++)
@@ -1568,6 +1580,12 @@ bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out)
 {
     if (out == NULL || !sInBattle || !sRemoteBattleActionReady)
         return FALSE;
+    if (sRemoteBattleActionEpoch != sBattleEpoch || sRemoteBattleActionTurn != sBattleTurn)
+    {
+        if (sRemoteBattleActionEpoch != sBattleEpoch || sRemoteBattleActionTurn < sBattleTurn)
+            sRemoteBattleActionReady = FALSE;
+        return FALSE;
+    }
     *out = sRemoteBattleAction;
     sRemoteBattleActionReady = FALSE;
     return TRUE;
@@ -1650,6 +1668,12 @@ bool8 Coop_BattleSyncTurnStart(void)
     }
     if (!sRemoteBattleSeedReady)
         return FALSE;
+    if (sRemoteBattleSeedEpoch != sBattleEpoch || sRemoteBattleSeedTurn != sBattleTurn)
+    {
+        if (sRemoteBattleSeedEpoch != sBattleEpoch || sRemoteBattleSeedTurn < sBattleTurn)
+            sRemoteBattleSeedReady = FALSE;
+        return FALSE;
+    }
     gRngValue = sRemoteBattleRng;
     gRng2Value = sRemoteBattleRng2;
     sRemoteBattleSeedReady = FALSE;
@@ -1662,9 +1686,11 @@ void Coop_BattleTurnComplete(void)
         return;
     sBattleTurn++;
     sLocalBattleActionSent = FALSE;
-    sRemoteBattleActionReady = FALSE;
+    if (sRemoteBattleActionEpoch != sBattleEpoch || sRemoteBattleActionTurn != sBattleTurn)
+        sRemoteBattleActionReady = FALSE;
     sBattleSeedSent = FALSE;
-    sRemoteBattleSeedReady = FALSE;
+    if (sRemoteBattleSeedEpoch != sBattleEpoch || sRemoteBattleSeedTurn != sBattleTurn)
+        sRemoteBattleSeedReady = FALSE;
 }
 
 bool8 Coop_BattleAbortPending(void)
