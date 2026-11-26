@@ -2545,6 +2545,79 @@ bool8 Coop_BattleSyncTurnStart(void)
     return TRUE;
 }
 
+
+bool8 Coop_BattleSyncFinalState(void)
+{
+    if (!sInBattle || !sBattleHadLink)
+        return TRUE;
+    if (CoopNet_Role() == 0)
+    {
+        if (sBattleFinalSent)
+            return TRUE;
+        {
+            u8 snapshot[4096];
+            u32 snapshotLen;
+            u32 checksum;
+            if (!BuildBattleSnapshot(snapshot, &snapshotLen) || snapshotLen + 4 > sizeof(snapshot))
+            {
+                sAbort = TRUE;
+                if (gBattleOutcome == 0)
+                    gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+                return TRUE;
+            }
+            checksum = HashBattleBytes(2166136261u, snapshot, snapshotLen);
+            snapshot[snapshotLen] = (u8)(checksum >> 24);
+            snapshot[snapshotLen + 1] = (u8)(checksum >> 16);
+            snapshot[snapshotLen + 2] = (u8)(checksum >> 8);
+            snapshot[snapshotLen + 3] = (u8)checksum;
+            if (!CoopNet_SendBytes(COOP_MSG_BATTLE_FINAL, snapshot, snapshotLen + 4))
+            {
+                if (++sBattleFinalWaitFrames >= 3600)
+                {
+                    sAbort = TRUE;
+                    if (gBattleOutcome == 0)
+                        gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+                    return TRUE;
+                }
+                return FALSE;
+            }
+            sBattleFinalSent = TRUE;
+            sBattleFinalWaitFrames = 0;
+        }
+        return TRUE;
+    }
+
+    if (sRemoteBattleFinalReady
+        && sRemoteBattleFinalEpoch == sBattleEpoch
+        && sRemoteBattleFinalTurn == sBattleTurn
+        && sRemoteBattleFinalLen >= 18)
+    {
+        u32 snapshotLen = sRemoteBattleFinalLen - 4;
+        u32 expected = ReadBe32(sRemoteBattleFinal + snapshotLen);
+        if (!ApplyBattleSnapshot(sRemoteBattleFinal, snapshotLen)
+            || BattleStateChecksum() != expected)
+        {
+            sAbort = TRUE;
+            if (gBattleOutcome == 0)
+                gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+            sRemoteBattleFinalReady = FALSE;
+            return TRUE;
+        }
+        sRemoteBattleFinalReady = FALSE;
+        sBattleFinalWaitFrames = 0;
+        return TRUE;
+    }
+
+    if (++sBattleFinalWaitFrames >= 3600)
+    {
+        sAbort = TRUE;
+        if (gBattleOutcome == 0)
+            gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 void Coop_BattleTurnComplete(void)
 {
     if (!sInBattle)
