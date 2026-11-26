@@ -1,5 +1,33 @@
 # Port log
 
+## 2026-11-26, prevent shared-world queue overflow loss
+
+### Changed
+
+- The game-side flag/variable queue now coalesces pending updates for the
+  same state key. It removes the older queued update and appends the newest
+  value at the tail, preserving ordering relative to other story changes.
+- If the queue is full and a new distinct state key cannot be queued, the
+  story-state scan is restarted. The scanner waits for queue space and
+  republishes the current shared flags and variables instead of silently
+  losing the state change.
+- The scan's own bounded enqueue path remains capacity-guarded.
+
+### Not verified
+
+- This change has not been compiled or exercised in-game.
+- No Android build or two-device test is verified.
+
+### Next
+
+1. Build the native Android target and fix any compile issues.
+2. Stress the shared-state queue with repeated flag/variable updates while
+   the peer is disconnected, then reconnect and verify convergence.
+3. Continue protocol and battle-action tests before publishing.
+
+---
+
+
 ## 2026-11-26, ZeroTier UDP position relay
 
 State: the Android bridge and native transport now have a UDP relay path in
