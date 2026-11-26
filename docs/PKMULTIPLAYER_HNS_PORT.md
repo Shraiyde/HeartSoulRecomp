@@ -144,10 +144,12 @@ Game-layer work now added on top of that transport:
   battle turn. The guest pauses battle selection until it has applied the
   authoritative turn seed, so AI and battle resolution start from the same
   random state.
-- The host sends the generated enemy party, active opponent battlers,
-  battle flags/weather, and mirrored battler party-order/action bookkeeping
-  before the first turn. The guest applies this authoritative setup before
-  comparing the first turn checksum.
+- At every turn boundary, the host sends a canonical battle snapshot: both
+  player parties, the enemy party, all active battlers, side statuses/timers,
+  protection and special-status flags, action/party bookkeeping, delayed
+  effects, and battle metadata. The guest remaps host/guest battler and party
+  indexes into its local layout before applying the snapshot and checking the
+  turn checksum. This provides turn-boundary state repair before RNG/AI work.
 - Battle action and seed packets are tagged with a battle epoch and turn.
   One-turn-ahead packets are buffered to tolerate small timing differences
   between phones.
