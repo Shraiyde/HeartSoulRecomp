@@ -426,7 +426,7 @@ static bool DecodeEncrypted(const uint8_t *wire, size_t wireLen, int expectedSen
     return true;
 }
 
-static void FlushOutbound(int fd, int sender, uint32_t *seq)
+static void FlushOutbound(int fd, int sender, uint32_t *seq, bool sendPositionTcp)
 {
     uint32_t position[COOP_POSITION_WORDS];
     bool have = false;
@@ -439,13 +439,22 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq)
         have = true;
     }
     pthread_mutex_unlock(&sMu);
-    if (have)
+    if (have && sendPositionTcp)
     {
         uint8_t raw[COOP_POSITION_WORDS * 4];
+        uint32_t positionSeq;
         int i;
         for (i = 0; i < COOP_POSITION_WORDS; i++)
             StoreBe32(raw + i * 4, position[i]);
-        if (!BuildAndSend(fd, sender, COOP_MSG_POSITION, raw, sizeof(raw), ++(*seq)))
+        if (sPcSession)
+            positionSeq = ++(*seq);
+        else
+        {
+            pthread_mutex_lock(&sMu);
+            positionSeq = ++sPositionTxSeq;
+            pthread_mutex_unlock(&sMu);
+        }
+        if (!BuildAndSend(fd, sender, COOP_MSG_POSITION, raw, sizeof(raw), positionSeq))
             return;
     }
     for (guard = 0; guard < 8; guard++)
@@ -1079,7 +1088,7 @@ static void RunSession(int fd, int localRole, bool isHost)
                 int userMs = background ? 120000 : 20000;
                 setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &userMs, sizeof(userMs));
 #endif
-                FlushOutbound(fd, localRole, &seq);
+                FlushOutbound(fd, localRole, &seq, sPcSession || !udpReady);
                 lastPos = now;
                 continue;
             }
