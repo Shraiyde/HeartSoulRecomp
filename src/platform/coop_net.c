@@ -23,6 +23,7 @@
 
 #define COOP_PEER_MAGIC 0x4D504C4Bu
 #define COOP_PEER_VER   1
+#define COOP_PHONE_PROTOCOL 2
 #define COOP_MAX_FRAME  8192
 #define COOP_QUEUE      48
 #define COOP_PAY_MAX    96
@@ -62,6 +63,8 @@ static bool sBackground;
 static bool sForceFlush;
 static bool sHaveKey;
 static char sClientId[20];
+static char sPeerClientId[20];
+static bool sHavePeerClientId;
 
 static uint64_t CoopNowMs(void)
 {
@@ -582,16 +585,24 @@ static bool HelloProofForId(const char *clientId, char *out, size_t cap)
     return CoopBase64Encode(mac, 32, out, cap) > 0;
 }
 
-static bool VerifyHello(const char *line)
+static bool VerifyHello(const char *line, char *clientIdOut, size_t clientIdCap)
 {
     char clientId[20];
     char proof[80];
     char expected[80];
-    if (sscanf(line, "HELLO %19s %79s", clientId, proof) != 2)
+    if (sscanf(line, "HELLO %d %19s %79s", &(int){0}, clientId, proof) != 3)
         return false;
+    {
+        int version = 0;
+        if (sscanf(line, "HELLO %d", &version) != 1 || version != COOP_PHONE_PROTOCOL)
+            return false;
+    }
     if (strlen(clientId) < 8 || !HelloProofForId(clientId, expected, sizeof(expected)))
         return false;
-    return strcmp(proof, expected) == 0;
+    if (strcmp(proof, expected) != 0 || clientIdCap <= strlen(clientId))
+        return false;
+    memcpy(clientIdOut, clientId, strlen(clientId) + 1);
+    return true;
 }
 
 /* Both devices run the same encrypted, framed peer protocol. The phone that
@@ -616,6 +627,7 @@ static void RunSession(int fd, int localRole, bool isHost)
     char line[160];
     char proof[80];
     char hello[128];
+    char peerId[20];
     uint8_t acc[COOP_MAX_FRAME + 8];
     size_t have = 0;
     uint32_t seq = 1;
@@ -624,12 +636,34 @@ static void RunSession(int fd, int localRole, bool isHost)
 
     if (isHost)
     {
-        if (!ReadLine(fd, line, sizeof(line)) || !VerifyHello(line)
-            || !SendAll(fd, (const uint8_t *)"READY 1\n", 8))
+        if (!ReadLine(fd, line, sizeof(line))
+            || !VerifyHello(line, peerId, sizeof(peerId))
+            || (sHavePeerClientId && strcmp(sPeerClientId, peerId) != 0))
+        {
+            fprintf(stderr, "co-op: rejected a different or incompatible phone peer\n");
+            close(fd);
+            return;
+        }
+        if (!sHavePeerClientId)
+        {
+            memcpy(sPeerClientId, peerId, strlen(peerId) + 1);
+            sHavePeerClientId = true;
+        }
+        if (!HelloProofForId(sClientId, proof, sizeof(proof)))
         {
             close(fd);
             return;
         }
+        snprintf(hello, sizeof(hello), "READY %d %s %s\n",
+                 COOP_PHONE_PROTOCOL, sClientId, proof);
+        memset(proof, 0, sizeof(proof));
+        if (!SendAll(fd, (const uint8_t *)hello, strlen(hello)))
+        {
+            memset(hello, 0, sizeof(hello));
+            close(fd);
+            return;
+        }
+        memset(hello, 0, sizeof(hello));
     }
     else
     {
@@ -638,7 +672,11 @@ static void RunSession(int fd, int localRole, bool isHost)
             close(fd);
             return;
         }
-        snprintf(hello, sizeof(hello), "HELLO %s %s\n", sClientId, proof);
+        if (sPcSession)
+            snprintf(hello, sizeof(hello), "HELLO %s %s\n", sClientId, proof);
+        else
+            snprintf(hello, sizeof(hello), "HELLO %d %s %s\n",
+                     COOP_PHONE_PROTOCOL, sClientId, proof);
         memset(proof, 0, sizeof(proof));
         if (!SendAll(fd, (const uint8_t *)hello, strlen(hello)))
         {
@@ -672,11 +710,28 @@ static void RunSession(int fd, int localRole, bool isHost)
             if (localRole != 0 && localRole != 1)
                 localRole = 0;
         }
-        else if (strcmp(line, "READY 1") != 0)
+        else
         {
-            fprintf(stderr, "co-op: host rejected the join\n");
-            close(fd);
-            return;
+            int version = 0;
+            char hostId[20];
+            char hostProof[80];
+            char expected[80];
+            if (sscanf(line, "READY %d %19s %79s", &version, hostId, hostProof) != 3
+                || version != COOP_PHONE_PROTOCOL
+                || strlen(hostId) < 8
+                || !HelloProofForId(hostId, expected, sizeof(expected))
+                || strcmp(hostProof, expected) != 0
+                || (sHavePeerClientId && strcmp(sPeerClientId, hostId) != 0))
+            {
+                fprintf(stderr, "co-op: incompatible or changed phone host\n");
+                close(fd);
+                return;
+            }
+            if (!sHavePeerClientId)
+            {
+                memcpy(sPeerClientId, hostId, strlen(hostId) + 1);
+                sHavePeerClientId = true;
+            }
         }
     }
 
