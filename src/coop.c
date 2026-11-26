@@ -1226,18 +1226,16 @@ bool8 Coop_IsStorySyncReady(void)
     return sSessionLive && sScanDone && sRemoteReady && sOutN == 0;
 }
 
-bool8 Coop_PartnersNearby(void)
+static bool8 PartnerInRange(void)
 {
     struct CoopRemoteView remote;
     struct ObjectEvent *player;
     s16 dx, dy;
 
-    if (!Coop_IsStorySyncReady())
-        return FALSE;
     CoopNet_CopyRemote(&remote);
     if (!remote.valid || remote.ageMs > 3000 || remote.sio == 0 || remote.x == 0)
         return FALSE;
-    if (gPlayerAvatar.objectEventId >= OBJECT_EVENTS_COUNT)
+    if (gPlayerAvatar.objectEventId >= OBJECT_EVENTS_COUNT || gSaveBlock1Ptr == NULL)
         return FALSE;
     player = &gObjectEvents[gPlayerAvatar.objectEventId];
     if (!player->active)
@@ -1251,7 +1249,13 @@ bool8 Coop_PartnersNearby(void)
         dx = -dx;
     if (dy < 0)
         dy = -dy;
-    return (dx + dy) <= 12 && sPartnerLeadValid && sPartnerPartyValid;
+    return (dx + dy) <= 12;
+}
+
+bool8 Coop_PartnersNearby(void)
+{
+    return Coop_IsStorySyncReady() && PartnerInRange()
+        && sPartnerLeadValid && sPartnerPartyValid;
 }
 
 bool8 Coop_BlockFieldEvent(void)
@@ -1273,7 +1277,11 @@ bool8 Coop_BlockTrainerApproach(void)
 {
     if (Coop_BlockFieldEvent())
         return TRUE;
-    return sSessionLive && CoopNet_IsUp() && !Coop_IsStorySyncReady();
+    if (!sSessionLive || !CoopNet_IsUp())
+        return FALSE;
+    if (!Coop_IsStorySyncReady())
+        return TRUE;
+    return PartnerInRange() && (!sPartnerLeadValid || !sPartnerPartyValid);
 }
 
 u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
@@ -1283,6 +1291,8 @@ u8 Coop_ChooseTrainerApproach(u8 localDistance, u8 partnerDistance)
     if (!sSessionLive || !CoopNet_IsUp())
         return localDistance;
     if (!Coop_IsStorySyncReady())
+        return 0;
+    if (PartnerInRange() && (!sPartnerLeadValid || !sPartnerPartyValid))
         return 0;
     if (!Coop_PartnersNearby())
         return localDistance;
