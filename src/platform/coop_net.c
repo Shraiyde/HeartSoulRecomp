@@ -23,7 +23,7 @@
 
 #define COOP_PEER_MAGIC 0x4D504C4Bu
 #define COOP_PEER_VER   1
-#define COOP_PHONE_PROTOCOL 2
+#define COOP_PHONE_PROTOCOL 3
 #define COOP_MAX_FRAME  8192
 #define COOP_QUEUE      48
 #define COOP_PAY_MAX    96
@@ -270,7 +270,7 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
     if (payLen > 4096 || len != 16 + payLen)
         return;
     payload = plain + 16;
-    if (type == COOP_MSG_ACK)
+    if (!sPcSession && type == COOP_MSG_ACK)
     {
         uint32_t ack;
         if (payLen != 4) return;
@@ -317,8 +317,10 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
         return;
     {
         struct CoopQueued item;
-        if (seq == 0) return;
-        pthread_mutex_lock(&sMu);
+        if (!sPcSession)
+        {
+            if (seq == 0) return;
+            pthread_mutex_lock(&sMu);
         if (seq <= sReliableRxSeq)
         {
             sAckDirty = true;
@@ -330,7 +332,8 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
             pthread_mutex_unlock(&sMu);
             return;
         }
-        pthread_mutex_unlock(&sMu);
+            pthread_mutex_unlock(&sMu);
+        }
         memset(&item, 0, sizeof(item));
         item.type = type;
         item.len = (uint16_t)payLen;
@@ -347,8 +350,17 @@ static void HandlePlain(const uint8_t *plain, size_t len, uint32_t seq)
         pthread_mutex_lock(&sMu);
         if (QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item))
         {
-            sReliableRxSeq = seq;
-            sAckDirty = true;
+            if (!sPcSession)
+            {
+                sReliableRxSeq = seq;
+                sAckDirty = true;
+            }
+        }
+        else if (sPcSession)
+        {
+            struct CoopQueued junk;
+            QueuePop(sIn, &sInRead, &sInWrite, &sInCount, &junk);
+            QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item);
         }
         pthread_mutex_unlock(&sMu);
     }
@@ -418,6 +430,17 @@ static void FlushOutbound(int fd, int sender, uint32_t *seq)
         pthread_mutex_unlock(&sMu);
         if (!got)
             break;
+        if (sPcSession)
+        {
+            if (!BuildAndSend(fd, sender, item.type, item.bytes, item.len, ++(*seq)))
+            {
+                pthread_mutex_lock(&sMu);
+                QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+                pthread_mutex_unlock(&sMu);
+                break;
+            }
+            continue;
+        }
         pthread_mutex_lock(&sMu);
         if (sPendingCount >= COOP_QUEUE)
         {
@@ -787,6 +810,7 @@ static void RunSession(int fd, int localRole, bool isHost)
     fprintf(stderr, "co-op: direct phone link up (role %d)\n", localRole);
 
     /* Replay unacknowledged events after reconnect; the receiver suppresses duplicates. */
+    if (!sPcSession)
     {
         int i;
         pthread_mutex_lock(&sMu);
@@ -822,7 +846,7 @@ static void RunSession(int fd, int localRole, bool isHost)
             have -= 4 + len;
         }
         now = CoopNowMs();
-        if (sAckDirty && now - lastAck >= 100)
+        if (!sPcSession && sAckDirty && now - lastAck >= 100)
         {
             uint8_t ackBytes[4];
             uint32_t ack;
@@ -872,6 +896,17 @@ static void RunSession(int fd, int localRole, bool isHost)
                 pthread_mutex_unlock(&sMu);
                 if (!got)
                     break;
+                if (sPcSession)
+                {
+                    if (!BuildAndSend(fd, localRole, item.type, item.bytes, item.len, ++seq))
+                    {
+                        pthread_mutex_lock(&sMu);
+                        QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+                        pthread_mutex_unlock(&sMu);
+                        goto down;
+                    }
+                    continue;
+                }
                 pthread_mutex_lock(&sMu);
                 if (sPendingCount >= COOP_QUEUE)
                 {
