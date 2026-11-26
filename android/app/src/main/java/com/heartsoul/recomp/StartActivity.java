@@ -1,6 +1,7 @@
 package com.heartsoul.recomp;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -8,6 +9,8 @@ import android.graphics.Point;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Display;
+import android.view.inputmethod.InputType;
+import android.widget.EditText;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -38,13 +41,42 @@ public class StartActivity extends Activity implements StartScreenView.Listener 
     }
 
     @Override
-    public void onStartGame(Settings settings) {
+    public void onStartGame(Settings settings, int coopMode) {
         settings.save(this);
-        launchGame();
+        if (coopMode == 2) {
+            EditText address = new EditText(this);
+            address.setSingleLine(true);
+            address.setHint("Host IPv4 address");
+            address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+            new AlertDialog.Builder(this)
+                    .setTitle("Join co-op")
+                    .setMessage("Enter the host's LAN or private VPN IPv4 address.")
+                    .setView(address)
+                    .setPositiveButton("JOIN", (dialog, which) -> {
+                        String host = address.getText().toString().trim();
+                        if (!host.isEmpty())
+                            launchGame("join", host);
+                    })
+                    .setNegativeButton("CANCEL", null)
+                    .show();
+        } else if (coopMode == 1) {
+            launchGame("host", null);
+        } else {
+            launchGame();
+        }
     }
 
     private void launchGame() {
-        startActivity(new Intent(this, HeartSoulActivity.class));
+        launchGame(null, null);
+    }
+
+    private void launchGame(String coopMode, String host) {
+        Intent intent = new Intent(this, HeartSoulActivity.class);
+        if (coopMode != null)
+            intent.putExtra("coop_mode", coopMode);
+        if (host != null)
+            intent.putExtra("coop_host", host);
+        startActivity(intent);
         overridePendingTransition(0, 0);
         finish();
     }
