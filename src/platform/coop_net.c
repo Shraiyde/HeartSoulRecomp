@@ -1432,7 +1432,7 @@ static void RunSession(int fd, int localRole, bool isHost)
                 struct CoopQueued item;
                 bool got;
                 pthread_mutex_lock(&sMu);
-                if (!sPcSession && sPendingCount >= COOP_QUEUE)
+                if (!sPcSession && sPendingCount >= COOP_RELIABLE_OUTBOX)
                 {
                     pthread_mutex_unlock(&sMu);
                     break;
