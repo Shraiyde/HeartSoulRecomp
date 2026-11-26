@@ -23,12 +23,14 @@
 
 #define COOP_PEER_MAGIC 0x4D504C4Bu
 #define COOP_PEER_VER   1
-#define COOP_PHONE_PROTOCOL 4
+#define COOP_PHONE_PROTOCOL 5
 #define COOP_MAX_FRAME  8192
 #define COOP_QUEUE      48
 #define COOP_RELIABLE_OUTBOX 2048
 #define COOP_PAY_MAX    1024
 #define COOP_MSG_ACK     0xFFFFu
+#define COOP_MSG_UDP_HELLO 39
+#define COOP_MSG_UDP_READY 40
 
 struct CoopQueued
 {
@@ -56,6 +58,8 @@ static struct CoopQueued sOut[COOP_QUEUE];
 static struct CoopQueued sPending[COOP_RELIABLE_OUTBOX];
 static int sPendingRead, sPendingWrite, sPendingCount;
 static uint32_t sReliableTxSeq, sReliableRxSeq;
+static uint32_t sPositionTxSeq, sPositionRxSeq;
+static uint64_t sUdpSendCounter, sUdpRecvCounter;
 static bool sAckDirty;
 static int sOutRead;
 static int sOutWrite;
