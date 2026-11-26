@@ -76,7 +76,7 @@ layer* above the existing TCP framing:
 4. Add a resume handshake carrying session identity and each side's last
    received sequence. Replay only missing reliable messages, in order.
 5. Keep position updates coalesced/latest-only so stale movement never blocks
-   story, battle, or control messages. Phone protocol v5 now uses an
+   story, battle, or control messages. Phone protocol v6 now uses an
    authenticated AES-GCM UDP datagram channel for movement, with sequenced
    snapshots and a TCP fallback when the Android bridge cannot carry UDP.
 6. Preserve the existing background hold and disconnect/battle-abort safety
@@ -109,7 +109,7 @@ messages per flush. The game layer currently uses these message types:
 | 30 `WORLD_RESYNC` | Requests a shared-world rescan. |
 | 31 `POSITION_RESYNC` | Requests position resync / shared-world rescan. |
 
-The current direct-phone transport is protocol version 5:
+The current direct-phone transport is protocol version 6:
 
 - The handshake carries authenticated process-session IDs and receive
   watermarks. Both peers resume only when each recognizes the other's current
@@ -209,7 +209,7 @@ PkMultiplayer transport behaviour.
 
 ## Current phone protocol
 
-The Android phone-to-phone handshake now advertises protocol version 5.
+The Android phone-to-phone handshake now advertises protocol version 6.
 Both peers authenticate persistent device identity and process-session
 identity with HMAC proofs. Receive watermarks allow same-process reconnects to
 resume and replay unacknowledged events; a restarted process begins a clean
@@ -236,3 +236,5 @@ and license notices. This document describes the compatibility boundary; it
 does not claim that the two projects already interoperate.
 
 - Remote switch selections are translated into the partner's three party slots. Battle item effects are simulated on both phones, but only the phone that owns the acting Pokémon consumes the item from its private bag.
+
+- Phone protocol bumped to v6 after adding the canonical per-turn battle snapshot and the final snapshot ACK/commit barrier; v5 clients are intentionally rejected.
