@@ -155,6 +155,9 @@ Game-layer work now added on top of that transport:
   in-memory session is discarded, both games receive a session-reset event,
   and a battle in progress is aborted rather than continuing with mismatched
   battle state.
+- Each game also publishes a save fingerprint derived from the trainer ID,
+  player name/gender and save encryption key. The peer pins that identity;
+  changing save slots resets the co-op game session and aborts an active battle.
 
 - The session state and outbox live in process memory; a full app/process
   restart starts a new transport session and does not restore unacknowledged
