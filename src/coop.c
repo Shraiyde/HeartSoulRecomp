@@ -1754,6 +1754,8 @@ bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out)
         return FALSE;
     }
     *out = sRemoteBattleAction;
+    if (out->action == B_ACTION_SWITCH && out->switchIndex < MULTI_PARTY_SIZE)
+        out->switchIndex += MULTI_PARTY_SIZE;
     sRemoteBattleActionReady = FALSE;
     return TRUE;
 }
