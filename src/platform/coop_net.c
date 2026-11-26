@@ -763,6 +763,17 @@ static void CreateSessionId(void)
     sHavePeerSessionId = false;
 }
 
+static void QueueSessionReset(void)
+{
+    struct CoopQueued item;
+    memset(&item, 0, sizeof(item));
+    item.type = COOP_MSG_SESSION_RESET;
+    pthread_mutex_lock(&sMu);
+    QueuePush(sIn, &sInRead, &sInWrite, &sInCount, &item);
+    QueuePush(sOut, &sOutRead, &sOutWrite, &sOutCount, &item);
+    pthread_mutex_unlock(&sMu);
+}
+
 static void RunSession(int fd, int localRole, bool isHost)
 {
     char line[160];
@@ -805,7 +816,11 @@ static void RunSession(int fd, int localRole, bool isHost)
         if (resume)
             AckPending(peerReceivedSeq);
         else
+        {
             ResetReliableSession();
+            if (sEverUp)
+                QueueSessionReset();
+        }
         memcpy(sPeerSessionId, peerSessionId, strlen(peerSessionId) + 1);
         sHavePeerSessionId = true;
         if (!HelloProofForSession("ready", sClientId, sSessionId,
@@ -921,7 +936,11 @@ static void RunSession(int fd, int localRole, bool isHost)
             if (resume)
                 AckPending((uint32_t)hostReceivedSeq);
             else
+            {
                 ResetReliableSession();
+                if (sEverUp)
+                    QueueSessionReset();
+            }
             memcpy(sPeerSessionId, hostSessionId, strlen(hostSessionId) + 1);
             sHavePeerSessionId = true;
         }
