@@ -74,6 +74,11 @@ static EWRAM_DATA u16 sPartnerMoves[4];
 static EWRAM_DATA struct Pokemon sPartnerParty[MULTI_PARTY_SIZE];
 static EWRAM_DATA bool8 sPartnerPartyValid;
 static EWRAM_DATA u16 sPartnerHp;
+static EWRAM_DATA u16 sBattleEpoch;
+static EWRAM_DATA u16 sBattleTurn;
+static EWRAM_DATA bool8 sLocalBattleActionSent;
+static EWRAM_DATA bool8 sRemoteBattleActionReady;
+static EWRAM_DATA struct CoopBattleAction sRemoteBattleAction;
 static EWRAM_DATA u16 sPartnerMaxHp;
 static EWRAM_DATA bool8 sSessionLive;
 static EWRAM_DATA struct Pokemon sPartyBackup[PARTY_SIZE];
@@ -584,6 +589,11 @@ static u32 ReadBe32(const u8 *p)
     return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3];
 }
 
+static u16 ReadBe16(const u8 *p)
+{
+    return (u16)((p[0] << 8) | p[1]);
+}
+
 static void HandleInbound(void)
 {
     u16 type;
@@ -636,6 +646,22 @@ static void HandleInbound(void)
             sPartnerHp = (u16)(payload[14] | (payload[15] << 8));
             sPartnerMaxHp = (u16)(payload[16] | (payload[17] << 8));
             sPartnerLeadValid = sPartnerSpecies != SPECIES_NONE && sPartnerLevel != 0;
+        }
+        else if (type == COOP_MSG_BATTLE_ACTION && len == 12)
+        {
+            u16 epoch = ReadBe16(payload);
+            u16 turn = ReadBe16(payload + 2);
+            if (sInBattle && epoch == sBattleEpoch && turn == sBattleTurn)
+            {
+                sRemoteBattleAction.action = payload[4];
+                sRemoteBattleAction.data1 = payload[5];
+                sRemoteBattleAction.data2 = payload[6];
+                sRemoteBattleAction.data3 = payload[7];
+                sRemoteBattleAction.switchIndex = payload[8];
+                sRemoteBattleAction.movePosition = payload[9];
+                sRemoteBattleAction.moveTarget = ReadBe16(payload + 10);
+                sRemoteBattleActionReady = TRUE;
+            }
         }
         else if (type == COOP_MSG_WORLD_PARTY_BLOB && len == sizeof(sPartnerParty))
         {
@@ -1464,6 +1490,13 @@ void Coop_OnBattleStarted(void)
      * photograph that temporary lead. */
     if (keepSnapshot)
         return;
+    sBattleEpoch++;
+    if (sBattleEpoch == 0)
+        sBattleEpoch = 1;
+    sBattleTurn = 0;
+    sLocalBattleActionSent = FALSE;
+    sRemoteBattleActionReady = FALSE;
+    memset(&sRemoteBattleAction, 0, sizeof(sRemoteBattleAction));
     sPartyCountBackup = gPlayerPartyCount;
     for (i = 0; i < PARTY_SIZE; i++)
         sPartyBackup[i] = gPlayerParty[i];
@@ -1496,6 +1529,48 @@ void Coop_OnBattleStarted(void)
         if (sTrainerB != 0)
             sTrainerBBeaten = HasTrainerBeenFought(sTrainerB);
     }
+}
+
+bool8 Coop_BattleTakeRemoteAction(struct CoopBattleAction *out)
+{
+    if (out == NULL || !sInBattle || !sRemoteBattleActionReady)
+        return FALSE;
+    *out = sRemoteBattleAction;
+    sRemoteBattleActionReady = FALSE;
+    return TRUE;
+}
+
+bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
+{
+    u8 wire[12];
+
+    if (action == NULL || !sInBattle || !CoopNet_IsUp() || sLocalBattleActionSent)
+        return FALSE;
+    wire[0] = (u8)(sBattleEpoch >> 8);
+    wire[1] = (u8)sBattleEpoch;
+    wire[2] = (u8)(sBattleTurn >> 8);
+    wire[3] = (u8)sBattleTurn;
+    wire[4] = action->action;
+    wire[5] = action->data1;
+    wire[6] = action->data2;
+    wire[7] = action->data3;
+    wire[8] = action->switchIndex;
+    wire[9] = action->movePosition;
+    wire[10] = (u8)(action->moveTarget >> 8);
+    wire[11] = (u8)action->moveTarget;
+    if (!CoopNet_SendBytes(COOP_MSG_BATTLE_ACTION, wire, sizeof(wire)))
+        return FALSE;
+    sLocalBattleActionSent = TRUE;
+    return TRUE;
+}
+
+void Coop_BattleTurnComplete(void)
+{
+    if (!sInBattle)
+        return;
+    sBattleTurn++;
+    sLocalBattleActionSent = FALSE;
+    sRemoteBattleActionReady = FALSE;
 }
 
 bool8 Coop_BattleAbortPending(void)
