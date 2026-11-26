@@ -1609,6 +1609,8 @@ bool8 Coop_BattleSendLocalAction(const struct CoopBattleAction *action)
     wire[7] = action->data3;
     wire[8] = action->switchIndex;
     wire[9] = action->movePosition;
+    wire[10] = (u8)(action->moveTarget >> 8);
+    wire[11] = (u8)action->moveTarget;
     if (!CoopNet_SendBytes(COOP_MSG_BATTLE_ACTION, wire, sizeof(wire)))
         return FALSE;
     sLocalBattleActionSent = TRUE;
