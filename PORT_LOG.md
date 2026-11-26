@@ -1089,7 +1089,7 @@ State at end of session: repo created, nothing built yet, no code changed.
 
 ### Implemented on `coop/pkmultiplayer-hns-adapter`
 
-- Direct-phone handshake advanced to protocol v3; the legacy Windows PC-host
+- Direct-phone handshake advanced to protocol v4; the legacy Windows PC-host
   handshake remains unchanged.
 - Added an application-level reliable sequence independent of the AES-GCM
   per-connection nonce counter.
