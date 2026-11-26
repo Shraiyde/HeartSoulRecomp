@@ -250,6 +250,146 @@ static bool BuildAndSend(int fd, int sender, uint16_t type, const uint8_t *paylo
     return EncryptAndSend(fd, sender, plain, 16 + len);
 }
 
+static bool BuildUdpPacket(int sender, uint16_t type, const uint8_t *payload,
+                            uint32_t len, uint32_t seq, uint8_t *packet,
+                            size_t packetCap, size_t *packetLen)
+{
+    uint8_t plain[16 + COOP_PAY_MAX];
+    uint8_t nonce[12];
+    uint8_t cipher[COOP_MAX_FRAME];
+    uint8_t tag[16];
+    uint64_t counter;
+    size_t plainLen = 16 + len;
+    size_t wireLen = 12 + plainLen + 16;
+
+    if (len > COOP_PAY_MAX || plainLen > COOP_MAX_FRAME || wireLen > packetCap || !sHaveKey)
+        return false;
+    StoreBe32(plain, COOP_PEER_MAGIC);
+    plain[4] = 0;
+    plain[5] = COOP_PEER_VER;
+    plain[6] = (uint8_t)(type >> 8);
+    plain[7] = (uint8_t)type;
+    StoreBe32(plain + 8, len);
+    StoreBe32(plain + 12, seq);
+    if (len != 0)
+        memcpy(plain + 16, payload, len);
+
+    pthread_mutex_lock(&sMu);
+    counter = sUdpSendCounter++;
+    pthread_mutex_unlock(&sMu);
+    StoreBe32(nonce, (uint32_t)sender);
+    StoreBe64(nonce + 4, counter);
+    if (CoopAesGcmEncrypt(sSessionKey, nonce, plain, plainLen, cipher, tag) != 0)
+        return false;
+    memcpy(packet, nonce, sizeof(nonce));
+    memcpy(packet + 12, cipher, plainLen);
+    memcpy(packet + 12 + plainLen, tag, sizeof(tag));
+    *packetLen = wireLen;
+    return true;
+}
+
+static bool SendUdpMessage(int fd, const struct sockaddr_in *to, int sender,
+                           uint16_t type, const uint8_t *payload,
+                           uint32_t len, uint32_t seq)
+{
+    uint8_t packet[12 + COOP_MAX_FRAME + 16];
+    size_t packetLen;
+    ssize_t sent;
+
+    if (fd < 0 || to == NULL
+        || !BuildUdpPacket(sender, type, payload, len, seq,
+                           packet, sizeof(packet), &packetLen))
+        return false;
+    sent = sendto(fd, packet, packetLen, 0, (const struct sockaddr *)to, sizeof(*to));
+    return sent == (ssize_t)packetLen;
+}
+
+static bool DecodeUdpPacket(const uint8_t *packet, size_t packetLen,
+                            int expectedSender, uint8_t *plain,
+                            size_t plainCap, size_t *plainLen)
+{
+    uint32_t sender;
+    uint64_t counter;
+    size_t cipherLen;
+    const uint8_t *tag;
+
+    if (packetLen < 28 || packetLen > 12 + COOP_MAX_FRAME + 16)
+        return false;
+    sender = LoadBe32(packet);
+    counter = LoadBe64(packet + 4);
+    if (sender != (uint32_t)expectedSender)
+        return false;
+    pthread_mutex_lock(&sMu);
+    if (counter <= sUdpRecvCounter)
+    {
+        pthread_mutex_unlock(&sMu);
+        return false;
+    }
+    pthread_mutex_unlock(&sMu);
+    cipherLen = packetLen - 28;
+    if (cipherLen > plainCap || cipherLen < 16)
+        return false;
+    tag = packet + 12 + cipherLen;
+    if (CoopAesGcmDecrypt(sSessionKey, packet, packet + 12, cipherLen, tag, plain) != 0)
+        return false;
+    pthread_mutex_lock(&sMu);
+    if (counter > sUdpRecvCounter)
+        sUdpRecvCounter = counter;
+    pthread_mutex_unlock(&sMu);
+    *plainLen = cipherLen;
+    return true;
+}
+
+static int CreateUdpSocket(int tcpFd, bool isHost, struct sockaddr_in *peer)
+{
+    int fd, on = 1, flags;
+    struct sockaddr_in local;
+    socklen_t addrLen;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0)
+        return -1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    memset(&local, 0, sizeof(local));
+    local.sin_family = AF_INET;
+    if (isHost)
+    {
+        addrLen = sizeof(local);
+        if (getsockname(tcpFd, (struct sockaddr *)&local, &addrLen) < 0)
+        {
+            close(fd);
+            return -1;
+        }
+        local.sin_family = AF_INET;
+        if (bind(fd, (struct sockaddr *)&local, sizeof(local)) < 0)
+        {
+            close(fd);
+            return -1;
+        }
+        memset(peer, 0, sizeof(*peer));
+    }
+    else
+    {
+        addrLen = sizeof(*peer);
+        if (getpeername(tcpFd, (struct sockaddr *)peer, &addrLen) < 0)
+        {
+            close(fd);
+            return -1;
+        }
+        local.sin_addr.s_addr = htonl(INADDR_ANY);
+        local.sin_port = 0;
+        if (bind(fd, (struct sockaddr *)&local, sizeof(local)) < 0)
+        {
+            close(fd);
+            return -1;
+        }
+    }
+    flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0)
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    return fd;
+}
+
 static void NoteLink(bool up)
 {
     pthread_mutex_lock(&sMu);
