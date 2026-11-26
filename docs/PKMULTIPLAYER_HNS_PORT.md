@@ -109,18 +109,33 @@ messages per flush. The game layer currently uses these message types:
 | 30 `WORLD_RESYNC` | Requests a shared-world rescan. |
 | 31 `POSITION_RESYNC` | Requests position resync / shared-world rescan. |
 
-Important gaps before a PkMultiplayer-style resume layer can be considered
-complete:
+The first reliability layer is now implemented on the direct-phone
+protocol (version 3):
 
-- The transport frame includes a 32-bit sequence in its plaintext header,
-  but the audited receive path does not use it for application-message ACKs,
-  duplicate suppression, or replay. The AES nonce counter is a per-connection
-  anti-replay check, not a reconnectable session sequence.
-- The outbound queue is bounded at 48 items. A failed send attempts to put
-  the item back; if the queue has filled meanwhile, the message is dropped.
-- The inbound queue drops its oldest item when full. That is unsafe for
-  story flags, variables, battle aborts and configuration messages unless
-  overflow is surfaced and those messages can be recovered.
+- Every reliable gameplay message receives a process-lifetime sequence number.
+  The existing 32-bit frame sequence field is now consumed by the receiver.
+- The receiver accepts only the next contiguous message, suppresses duplicates,
+  and ACKs the highest contiguous sequence it has actually queued for the game.
+- The sender retains unacknowledged messages in a 2,048-entry outbox, replays
+  them after reconnect, and retries outstanding messages every second while
+  connected. This also recovers from temporary inbound-queue saturation.
+- The 48-entry game-thread queues remain bounded. A full phone inbound queue
+  no longer discards an older event or ACKs the new one; the sender retains and
+  retries it. The legacy Windows PC transport keeps its old framing behaviour.
+- The guest retries reconnects with backoff for up to 60 seconds. The host
+  continues listening after a disconnect and authenticates the pinned peer ID.
+
+Remaining gaps:
+
+- The session state and outbox live in process memory; a full app/process
+  restart starts a new transport session and does not restore unacknowledged
+  events from disk.
+- The protocol still uses the existing TCP stream, so movement does not have
+  ENet's independent unreliable/sequenced channel and can experience
+  head-of-line blocking.
+- Message-specific idempotency keys for irreversible game effects (rewards,
+  catches, trade commits and battle outcomes) are still needed above transport
+  delivery.
 - Position and gameplay messages share one TCP stream. The position snapshot
   is sent first on each flush, but this does not create ENet's independent
   fast channel; large or stalled reliable traffic can still delay movement.
@@ -153,7 +168,7 @@ semantics or adding more gameplay messages.
 
 ## First native compatibility change
 
-The Android phone-to-phone handshake now advertises protocol version 2.
+The Android phone-to-phone handshake now advertises protocol version 3.
 Both peers prove their persistent client identity with the existing HMAC
 challenge. The host pins the first authenticated guest identity for the life
 of that host process; a different client cannot take over the same live host
@@ -163,9 +178,10 @@ reconnect must be the same peer/save identity, rather than silently attaching
 a different save to an existing shared world. The Windows PC-host handshake
 is intentionally unchanged.
 
-This is only protocol negotiation and peer pinning. It does not yet add the
-sequence/ACK/outbox/resume layer, and it has not been compiled or tested on
-two Android devices. Phone builds using the older direct-phone handshake are
+The phone transport now negotiates protocol version 3, pins the authenticated
+peer identity, retains sequenced gameplay messages until ACK, suppresses
+replayed duplicates, and replays unacknowledged messages after reconnect. It
+has not been compiled or tested on two Android devices. Phone builds using the older direct-phone handshake are
 not wire-compatible with protocol version 2; both phones must use a build
 containing this change.
 
