@@ -107,7 +107,7 @@ but no Android build or two-device test is verified.
 - The 2,048-entry reliable replay outbox remains separate and retains sent
   phone-session messages until acknowledged. The change removes roughly
   8 MiB of static queue storage without reducing the replay outbox capacity.
-- The existing phone transport on this branch is protocol v5: authenticated
+- The current phone transport on this branch is protocol v6: authenticated
   client/session handshake, reconnect resume, ordered reliable TCP messages,
   ACK/replay, and latest-only UDP position snapshots. The PC World Host
   handshake remains a separate legacy path.
