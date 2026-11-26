@@ -124,11 +124,13 @@ final class CoopLobby {
                 // This build's native transport is bound to one fixed port.
                 // Do not display directory entries that joinOpen cannot reach.
                 if (port != CoopNetwork.PORT) continue;
+                int players = clamp(entry.optInt("players", 1), 1, 2);
+                int max = clamp(entry.optInt("max", 2), 1, 2);
+                if (players >= max) continue;
                 result.add(new Lobby(address,
                         clean(entry.optString("name", "HEART & SOUL"), "HEART & SOUL"),
                         clean(entry.optString("host", "PLAYER"), "PLAYER"),
-                        clamp(entry.optInt("players", 1), 1, 2),
-                        clamp(entry.optInt("max", 2), 1, 2), port));
+                        players, max, port));
             }
         } catch (Exception error) {
             Log.e(TAG, "Invalid lobby directory response", error);
