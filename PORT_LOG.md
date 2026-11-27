@@ -1563,3 +1563,13 @@ State at end of session: repo created, nothing built yet, no code changed.
   `-Werror=implicit-function-declaration` and a conflicting static declaration.
 - Added the missing file-scope forward declaration beside the other private
   helper declarations. The next branch-push CI run will verify this fix.
+
+
+## 2026-11-27: Fix Android Java compilation failure
+
+- The native build, embedded ZeroTier build, and generated game data all
+  completed successfully in CI. Android Java compilation then failed because
+  the ZeroTier monitor lambda declared a catch parameter named `error`, which
+  shadowed the enclosing `bringUp` catch parameter.
+- Renamed the monitor's catch parameter to `statusError`. This is a Java
+  scope-only correction; monitor behavior is unchanged.
