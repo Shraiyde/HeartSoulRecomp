@@ -1553,3 +1553,13 @@ State at end of session: repo created, nothing built yet, no code changed.
 - Follow-up lobby validation: entries already at capacity are now omitted
   from the join list. The host advertises one occupied slot out of two, so
   only lobbies with a free player slot are offered to guests.
+
+
+## 2026-11-27: Fix first native build failure
+
+- The first complete CI run successfully built embedded ZeroTier and the game
+  data, then failed compiling `src/coop.c`: `Coop_Frame` called the static
+  `PublishSaveIdentity` helper before its definition, triggering
+  `-Werror=implicit-function-declaration` and a conflicting static declaration.
+- Added the missing file-scope forward declaration beside the other private
+  helper declarations. The next branch-push CI run will verify this fix.
