@@ -193,9 +193,9 @@ public final class HeartSoulZeroTier {
                         Thread.sleep(1000);
                     } catch (InterruptedException stopped) {
                         return;
-                    } catch (Throwable error) {
+                    } catch (Throwable statusError) {
                         transportReadyCached = false;
-                        Log.w(TAG, "ZeroTier transport status check failed", error);
+                        Log.w(TAG, "ZeroTier transport status check failed", statusError);
                         try { Thread.sleep(1000); }
                         catch (InterruptedException stopped) { return; }
                     }
