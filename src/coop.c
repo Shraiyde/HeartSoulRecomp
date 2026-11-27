@@ -140,6 +140,7 @@ static EWRAM_DATA bool8 sAnnouncedBackground;
 #define COOP_SIO_SCRIPT 2u
 
 static void MaintainScriptLock(void);
+static void PublishSaveIdentity(void);
 
 static const u16 sSharedVars[] =
 {
