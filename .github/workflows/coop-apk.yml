@@ -16,6 +16,7 @@ on:
       - recomp-phone-1
       - recomp-phone-2
       - recomp-phone-3
+      - recomp-phone-4
   workflow_dispatch:
 
 permissions:
@@ -115,30 +116,18 @@ jobs:
           done
           test "$ok" = 1
           test -f android/app/build/outputs/apk/debug/app-debug.apk
-          if [ "${GITHUB_REF}" = "refs/tags/recomp-phone-3" ]; then
-            cp android/app/build/outputs/apk/debug/app-debug.apk \
-              "$RUNNER_TEMP/HeartSoulRecomp-recomp-phone-3.apk"
-            ls -lh "$RUNNER_TEMP/HeartSoulRecomp-recomp-phone-3.apk"
-          else
-            echo "debug APK compiled; not uploaded"
-          fi
-
-      - name: Upload branch APK
-        if: success() && github.ref != 'refs/tags/recomp-phone-3'
-        uses: actions/upload-artifact@v4
-        with:
-          name: HeartSoulRecomp-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+            "$RUNNER_TEMP/HeartSoulRecomp-recomp-phone-4.apk"
+          ls -lh "$RUNNER_TEMP/HeartSoulRecomp-recomp-phone-4.apk"
 
       - name: Publish phone co-op release
-        if: github.ref == 'refs/tags/recomp-phone-3'
+        if: github.ref == 'refs/heads/coop/pkmultiplayer-hns-adapter' || github.ref == 'refs/tags/recomp-phone-4'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: recomp-phone-3
-          name: Heart & Soul phone co-op 3
-          files: ${{ runner.temp }}/HeartSoulRecomp-recomp-phone-3.apk
+          tag_name: recomp-phone-4
+          target_commitish: ${{ github.sha }}
+          name: Heart & Soul phone co-op 4
+          files: ${{ runner.temp }}/HeartSoulRecomp-recomp-phone-4.apk
           body: |
             Phone-to-phone Heart & Soul co-op. HOST A GAME and JOIN A GAME use
             embedded ZeroTier. Hosts are listed at the Heart & Soul lobby directory.
